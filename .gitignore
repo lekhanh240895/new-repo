@@ -22,3 +22,11 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Self-hosted runtime assets (fetched by scripts/fetch-assets.mjs)
+public/models/
+public/mediapipe/
+
+# Replay outputs and local clips
+replay-out/
+clips/

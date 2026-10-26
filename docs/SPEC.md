@@ -194,7 +194,7 @@ All signals are computed per frame. Every signal carries a `valid` flag. Detecto
 
 1. **EAR** per eye, from 6 landmarks:
    `EAR = (‖p2−p6‖ + ‖p3−p5‖) / (2‖p1−p4‖)`
-   - Left eye: 33, 160, 158, 133, 153, 144. Right eye: 362, 385, 387, 263, 373, 380. (Check these indices against the MediaPipe canonical map in a unit test.)
+   - Subject's left eye: 362, 385, 387, 263, 373, 380. Subject's right eye: 33, 160, 158, 133, 153, 144. "Left/right" follow MediaPipe naming (`FACE_LANDMARKS_LEFT_EYE`), which matches blendshape `eyeBlinkLeft`. A unit test checks these against the MediaPipe connection lists.
 2. **Normalize** with the driver's baseline (§9):
    `open = clamp((EAR − EAR_closed) / (EAR_open − EAR_closed), 0, 1)`
 3. **Fuse** with the blendshape: `openFused = 0.6·open + 0.4·(1 − eyeBlink)`. Do this per eye, then take the mean of both eyes.
@@ -214,7 +214,7 @@ All signals are computed per frame. Every signal carries a `valid` flag. Detecto
 
 ### 8.4 Gaze (coarse)
 
-- Iris center (landmarks 468 and 473) relative to the eye corners and lids gives x/y in −1..1.
+- Iris center (473 = subject's left, 468 = subject's right) relative to the eye corners and lids gives x/y in −1..1.
 - Used only to tell "looking down while the head is straight" from "looking ahead". It is coarse and is not used for exact gaze points.
 
 ### 8.5 Filtering
@@ -226,12 +226,12 @@ All signals are computed per frame. Every signal carries a `valid` flag. Detecto
 
 | Gate | Rule (default) | Resulting sensor state |
 | --- | --- | --- |
-| No face | `faceFound = false` for > 1.0 s | `NO_FACE` |
-| Too dark / too bright | `faceLuma < 40` or `> 220` for > 1.0 s | `LOW_VISIBILITY` |
-| Face too small | `faceAreaRatio < 0.04` | `LOW_VISIBILITY` (prompt: move the phone closer) |
+| Face lost, short | `faceFound = false` for < 1.5 s (hand, cup, quick turn) | `OCCLUDED` |
+| Too dark / too bright | `faceLuma < 40` or `> 220` for ≥ 1.0 s | `LOW_VISIBILITY` |
+| Face too small | `faceAreaRatio < 0.04` for ≥ 1.0 s | `LOW_VISIBILITY` (prompt: move the phone closer) |
 | Heavy shake | `landmarkJitter` > 3× calibration value for > 0.5 s | Frames invalid; no state change if < 2 s |
 | Eye region bad | Both eyes invalid but face found (sunglasses, glare) | `EYES_HIDDEN` → degraded mode (§10.4) |
-| Sudden partial cover | Mouth or eye landmarks jump and the face box shrinks or shifts, < 1.5 s | `OCCLUDED` |
+| Face lost, long | `faceFound = false` for ≥ 1.5 s | `NO_FACE` |
 | Slow frames | fps < 8 for > 3 s | `DEGRADED` (notice + lower resolution) |
 
 ## 9. Calibration
@@ -459,6 +459,17 @@ Accessibility: alerts never rely on color alone (sound + pattern too), and flash
 | v0.3 (experimental) | Phone-object detection with MediaPipe Object Detector (EfficientDet-Lite, Apache-2.0, COCO "cell phone" class), every N frames, flag off by default | Precision measured on our clips |
 | Research track | rPPG (POS algorithm) in **parked / desk mode only**, never used for alerts | Error vs a chest strap published honestly |
 | Later | Pro (B2C) and Fleet (B2B) tiers | Separate spec + privacy/legal review |
+
+### 17.1 Status notes
+
+- **M0 done.** State machine + golden-trace tests.
+- **M1 done** (verified in headless Chromium with the replay harness): worker and main-thread backends, GPU and CPU delegates, quality gates (including "no face + dark frame → LOW_VISIBILITY"), Debug mode, replay harness, CI smoke test.
+- **Carried into M2:**
+  - Confirm the **pitch sign** on a real device (nod down in Debug mode; pitch should go negative). A flat test photo cannot nod.
+  - Pick GPU or CPU with a short start-up benchmark. In headless Chromium without a GPU, the emulated GPU was much slower than CPU (~360 ms vs ~40 ms per frame).
+  - `EYES_HIDDEN` (sunglasses) detection needs real recordings first.
+  - Choose the driver face by calibrated position, not just "largest face" (F17).
+  - Watchdog (F20) and adaptive resolution (F6).
 
 ## 18. Review of claims in the original brief
 

@@ -4,12 +4,14 @@
  */
 
 export interface QualityConfig {
-  noFaceMs: number;
+  /** Bad light or a too-small face must last this long before LOW_VISIBILITY. */
+  badLightMs: number;
   minFaceLuma: number;
   maxFaceLuma: number;
   minFaceAreaRatio: number;
   jitterFactor: number;
   jitterMs: number;
+  /** A lost face counts as OCCLUDED (hand, cup) for this long, then NO_FACE. */
   occlusionMaxMs: number;
   minFps: number;
   minFpsWindowMs: number;
@@ -132,7 +134,7 @@ const MINUTE = 60 * SECOND
 
 export const DEFAULT_CONFIG: Readonly<Config> = Object.freeze({
   quality: {
-    noFaceMs: 1 * SECOND,
+    badLightMs: 1 * SECOND,
     minFaceLuma: 40,
     maxFaceLuma: 220,
     minFaceAreaRatio: 0.04,

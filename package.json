@@ -9,16 +9,25 @@
     "node": ">=22"
   },
   "scripts": {
+    "assets": "node scripts/fetch-assets.mjs",
+    "predev": "npm run -s assets",
+    "predev:phone": "npm run -s assets",
+    "prebuild": "npm run -s assets",
+    "prepreview": "npm run -s assets",
     "dev": "vite",
+    "dev:phone": "vite --host --mode phone",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "typecheck": "tsc -b",
     "lint": "oxlint",
     "test": "vitest run",
     "test:watch": "vitest",
+    "replay": "node scripts/replay.mjs",
+    "smoke": "node scripts/make-test-clip.mjs replay-out/smoke-dark.y4m && node scripts/replay.mjs --clip replay-out/smoke-dark.y4m --seconds 4 --params delegate=cpu --expect-sensor LOW_VISIBILITY",
     "check": "npm run typecheck && npm run lint && npm run test"
   },
   "dependencies": {
+    "@mediapipe/tasks-vision": "1.1.1",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"
   },
@@ -26,8 +35,10 @@
     "@types/node": "^24.19.2",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-basic-ssl": "^2.3.0",
     "@vitejs/plugin-react": "^6.1.2",
     "oxlint": "^1.88.0",
+    "playwright": "1.63.0",
     "typescript": "~6.0.3",
     "vite": "^8.3.4",
     "vitest": "^5.0.5"

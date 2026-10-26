@@ -18,13 +18,18 @@ export interface FrameResult {
     /** Frame-to-frame motion of stable points (nose bridge). */
     landmarkJitter: number;
   };
-  /** blinkL/blinkR are MediaPipe blendshape scores, 0–1. */
+  /** L/R = the subject's left/right. blinkL/blinkR are MediaPipe blendshape scores, 0–1. */
   eye?: { earL: number; earR: number; blinkL: number; blinkR: number };
   mouth?: { mar: number; jawOpen: number };
   /** From the facial transformation matrix, in degrees. */
   pose?: { pitchDeg: number; yawDeg: number; rollDeg: number };
-  /** Iris offset inside the eye box, −1..1. */
+  /** Iris offset inside the eye box, −1..1. y < 0 = looking down. */
   gaze?: { x: number; y: number };
+  /**
+   * Debug mode only: a few landmarks as flat [x0, y0, x1, y1, …], normalized 0–1.
+   * Never sent in normal monitoring.
+   */
+  debugPoints?: number[];
 }
 
 /** Can the system see the driver? (SPEC §8.6, §13.2) */

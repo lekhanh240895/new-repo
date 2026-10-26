@@ -21,5 +21,9 @@ jobs:
       - run: npm run typecheck
       - run: npm run lint
       - run: npm test
+      # Fetches the model and checks every asset against assets.lock.json.
       - run: npm run build
       - run: npm audit --omit=dev --audit-level=high
+      # Boots the real camera → worker → model pipeline in headless Chromium on a synthetic dark clip.
+      - run: npx playwright install --with-deps chromium
+      - run: npm run smoke
