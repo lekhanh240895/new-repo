@@ -56,7 +56,11 @@ describe('alarm sounds (SPEC §11)', () => {
     }
   })
 
-  it('has text for every spoken message', () => {
-    for (const text of Object.values(SPOKEN_TEXT)) expect(text.length).toBeGreaterThan(0)
+  it('has text for every spoken message in every language', () => {
+    const keys = Object.keys(SPOKEN_TEXT.en).sort()
+    for (const table of Object.values(SPOKEN_TEXT)) {
+      expect(Object.keys(table).sort()).toEqual(keys)
+      for (const text of Object.values(table)) expect(text.length).toBeGreaterThan(0)
+    }
   })
 })

@@ -142,6 +142,8 @@ process.exit(exitCode)
 /** Trip mode: click "Start trip", then sample the controller snapshot every 100 ms. */
 async function runTrip(page, consoleErrors) {
   await page.goto(`${url}?replay&tab=trip${values.params ? `&${values.params}` : ''}`)
+  // First run: the safety disclaimer must be accepted before a trip can start.
+  await page.getByLabel('I understand').check()
   await page.getByRole('button', { name: 'Start trip' }).click()
   const timeline = []
   let last = ''

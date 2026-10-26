@@ -6,9 +6,12 @@ with calm, step-by-step alerts.
 
 **No video ever leaves your device.** There is no server, no account and no analytics.
 
-> ⚠️ **Status: early development (milestone M2).** The full trip flow works: setup check,
-> per-driver calibration, and microsleep / eyes-off-road / fatigue alerts. It has been
-> tested with replayed video, not yet in real driving. Do not rely on it while driving.
+<p align="center"><img src="docs/demo.gif" alt="Start screen, Dark Cockpit monitoring with a small status dot, and the wake-up alarm in English and Vietnamese" width="260"></p>
+
+> ⚠️ **Status: v0.1.0 preview.** The full trip flow works: setup check, per-driver
+> calibration, Dark Cockpit monitoring, and microsleep / eyes-off-road / fatigue alerts,
+> in English and Vietnamese, online or offline. It has been tested with replayed video,
+> not yet in real driving. Do not rely on it while driving. See [CHANGELOG.md](CHANGELOG.md).
 
 ## Important limits
 
@@ -33,6 +36,7 @@ A trip goes: **Start** → setup check (face, light, distance, beep) → 8 s cal
 (eyes closed 1 s) to a loud alarm (2 s), and stop by themselves 2 s after your eyes open.
 
 - The model and wasm files are **self-hosted** and checked against SHA-256 hashes in `assets.lock.json`. Nothing loads from a CDN at runtime.
+- Production builds carry a strict **Content-Security-Policy** (the page may only talk to itself) and work **offline** after the first trip (installable PWA).
 - If the worker can't start (for example on some iOS versions), the model runs on the main thread instead.
 - The state machine (`src/core/fsm`) is pure TypeScript and fully unit-tested with scripted signal traces.
 - The trip controller (`src/app/trip/controller.ts`) gets every device service injected, so the whole
@@ -110,6 +114,18 @@ docs/FAILURE_MODES.md  failure-mode coverage
 
 Code rules: TypeScript strict, function components, no default exports.
 
+## Deploy
+
+The app is a folder of static files (`dist/`) and must be served over **HTTPS** (camera).
+
+- **Cloudflare Pages (recommended):** build command `npm run build`, output folder `dist`.
+  It reads the generated `dist/_headers`, so the strict CSP covers the page **and** the vision worker.
+- **GitHub Pages:** run the *Deploy to GitHub Pages* workflow by hand (Actions tab) after
+  enabling Pages (Settings → Pages → Source: GitHub Actions). GitHub Pages cannot send headers,
+  so only the page gets the CSP (via a `<meta>` tag), not the worker.
+
+New versions are never applied in the middle of a trip: the start screen offers "Update now".
+
 ## Roadmap
 
 | Milestone | Scope |
@@ -117,7 +133,8 @@ Code rules: TypeScript strict, function components, no default exports.
 | **M0** ✅ | Tooling, CI, core types, config, state machine + tests |
 | **M1** ✅ | Camera, vision worker + fallback, signals, quality gates, Debug mode, replay harness |
 | **M2** ✅ | Calibration, detectors, alerts (sound, voice, vibration), Wake Lock, watchdog, trip controller |
-| M3 | Dark Cockpit UI, offline PWA, v0.1 release |
+| **M3** ✅ | Dark Cockpit UI, onboarding, Vietnamese, offline PWA, CSP, battery + pause notification — **v0.1.0** |
+| Next | Real-device testing, sunglasses detection from recordings, threshold tuning from real data, trip history |
 
 ## License
 

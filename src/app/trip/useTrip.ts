@@ -2,11 +2,14 @@ import { useEffect, useState, useSyncExternalStore } from 'react'
 import { DEFAULT_CONFIG } from '../../core/config.ts'
 import { createAudioEngine } from '../../platform/audio.ts'
 import { openCamera } from '../../platform/camera.ts'
+import { watchBattery } from '../../platform/battery.ts'
 import { createScreenWakeLock, vibrateFor, watchVisibility } from '../../platform/device.ts'
 import { startFrameLoop } from '../../platform/frameLoop.ts'
 import { startSpeedMonitor } from '../../platform/speed.ts'
 import { createWatchdog } from '../../platform/watchdog.ts'
+import { showNotification } from '../../platform/notify.ts'
 import { startVisionEngine } from '../../vision/engine.ts'
+import { currentLang, translate } from '../i18n.ts'
 import { createTripController, type TripController, type TripDeps, type TripSnapshot } from './controller.ts'
 
 declare global {
@@ -28,6 +31,11 @@ function realDeps(): TripDeps {
     startSpeedMonitor: (armAboveKmh) => startSpeedMonitor(armAboveKmh),
     watchdog: createWatchdog(DEFAULT_CONFIG.watchdog.stallMs, DEFAULT_CONFIG.watchdog.startupMs),
     now: () => performance.now(),
+    watchBattery,
+    notify: () => {
+      const lang = currentLang()
+      showNotification(translate(lang, 'notify.title'), translate(lang, 'notify.body'))
+    },
   }
 }
 

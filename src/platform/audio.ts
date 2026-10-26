@@ -5,6 +5,10 @@
  */
 import type { AlarmLevel, ChimeKind, SpokenMessage } from '../core/fsm/types.ts'
 
+export type VoiceLang = 'en' | 'vi'
+
+export type VoiceMessage = SpokenMessage | 'calibrate' | 'batteryLow'
+
 export interface AudioEngine {
   /** Call inside a tap handler (browsers block audio until a user gesture). Returns false if audio is unavailable. */
   unlock(): boolean;
@@ -13,17 +17,32 @@ export interface AudioEngine {
   startAlarm(level: AlarmLevel): void;
   stopAlarm(): void;
   chime(kind: ChimeKind | 'test'): void;
-  speak(message: SpokenMessage | 'calibrate'): void;
+  speak(message: VoiceMessage): void;
+  /** Voice language. Falls back to English when the phone has no voice for it. */
+  setLanguage(lang: VoiceLang): void;
   dispose(): void;
 }
 
-export const SPOKEN_TEXT: Record<SpokenMessage | 'calibrate', string> = {
-  fatigueAdvisory: 'Signs of fatigue. Plan a break soon.',
-  fatigueStrong: 'You are tired. Please stop at a safe place.',
-  takeBreak: 'Please take a break.',
-  eyesHidden: 'Eyes not visible. Limited monitoring.',
-  calibrate: 'Look at the road and blink normally.',
+export const SPOKEN_TEXT: Record<VoiceLang, Record<VoiceMessage, string>> = {
+  en: {
+    fatigueAdvisory: 'Signs of fatigue. Plan a break soon.',
+    fatigueStrong: 'You are tired. Please stop at a safe place.',
+    takeBreak: 'Please take a break.',
+    eyesHidden: 'Eyes not visible. Limited monitoring.',
+    calibrate: 'Look at the road and blink normally.',
+    batteryLow: 'Battery low. Please connect the charger.',
+  },
+  vi: {
+    fatigueAdvisory: 'Có dấu hiệu mệt mỏi. Hãy sớm nghỉ ngơi.',
+    fatigueStrong: 'Bạn đang mệt. Hãy dừng xe ở nơi an toàn.',
+    takeBreak: 'Hãy nghỉ ngơi một chút.',
+    eyesHidden: 'Không thấy mắt. Giám sát bị hạn chế.',
+    calibrate: 'Hãy nhìn đường và chớp mắt bình thường.',
+    batteryLow: 'Pin yếu. Hãy cắm sạc.',
+  },
 }
+
+const VOICE_LOCALE: Record<VoiceLang, string> = { en: 'en-US', vi: 'vi-VN' }
 
 interface Tone {
   /** Seconds from the cycle start. */
@@ -80,6 +99,14 @@ export function createAudioEngine(deps: AudioDeps = {}): AudioEngine {
   let keepAlive: ConstantSourceNode | null = null
   let alarmTimer: ReturnType<typeof setInterval> | null = null
   let alarmNodes: OscillatorNode[] = []
+  let lang: VoiceLang = 'en'
+
+  /** The phone's voice for `lang`, if it has one. */
+  function voiceFor(l: VoiceLang): SpeechSynthesisVoice | null {
+    if (speech === null) return null
+    const prefix = l === 'vi' ? 'vi' : 'en'
+    return speech.getVoices().find((v) => v.lang.toLowerCase().startsWith(prefix)) ?? null
+  }
 
   function play(tones: readonly Tone[], startAt: number, track: boolean) {
     if (ctx === null) return
@@ -169,7 +196,10 @@ export function createAudioEngine(deps: AudioDeps = {}): AudioEngine {
       play(CHIMES[kind], ctx.currentTime + 0.02, false)
     },
     speak(message) {
-      const text = SPOKEN_TEXT[message]
+      // Use the chosen language only if the phone can actually speak it.
+      const voice = voiceFor(lang)
+      const useLang: VoiceLang = lang !== 'en' && voice === null ? 'en' : lang
+      const text = SPOKEN_TEXT[useLang][message]
       if (speech === null) {
         if (ready() && ctx !== null) play(CHIMES.speechFallback, ctx.currentTime + 0.02, false)
         return
@@ -177,13 +207,17 @@ export function createAudioEngine(deps: AudioDeps = {}): AudioEngine {
       try {
         speech.cancel()
         const u = new SpeechSynthesisUtterance(text)
-        u.lang = 'en-US'
+        u.lang = VOICE_LOCALE[useLang]
+        if (voice !== null && useLang === lang) u.voice = voice
         u.rate = 0.95
         speech.speak(u)
       } catch (err) {
         console.warn('BioMonitor: speech failed, using a tone', err)
         if (ready() && ctx !== null) play(CHIMES.speechFallback, ctx.currentTime + 0.02, false)
       }
+    },
+    setLanguage(l) {
+      lang = l
     },
     dispose() {
       engine.stopAlarm()

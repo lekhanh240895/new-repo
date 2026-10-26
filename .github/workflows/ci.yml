@@ -24,6 +24,9 @@ jobs:
       # Fetches the model and checks every asset against assets.lock.json.
       - run: npm run build
       - run: npm audit --omit=dev --audit-level=high
-      # Boots the real camera → worker → model pipeline in headless Chromium on a synthetic dark clip.
+      # Boots the real camera → worker → model pipeline in headless Chromium on a synthetic dark clip,
+      # under the production Content-Security-Policy (sent as a header by vite preview).
       - run: npx playwright install --with-deps chromium
       - run: npm run smoke
+      # Installs the PWA, goes offline, reloads and starts the pipeline from the caches.
+      - run: npm run offline-check

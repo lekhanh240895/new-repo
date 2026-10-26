@@ -1,4 +1,7 @@
 import { useEffect, useRef, useState, type RefObject } from 'react'
+import { DEFAULT_CONFIG } from '../../core/config.ts'
+import { startSpeedMonitor } from '../../platform/speed.ts'
+import { useLang } from '../i18n.ts'
 import { LiveChart, type Series } from './LiveChart.tsx'
 import { useVisionPipeline, type Sample } from './useVisionPipeline.ts'
 
@@ -82,6 +85,8 @@ export function DebugView() {
   const { videoRef, samplesRef, status, backend, error, start, stop } = useVisionPipeline(true)
   const overlayRef = useOverlay(samplesRef)
   const [latest, setLatest] = useState<Sample | undefined>(undefined)
+  const [stoppedMoving, setStoppedMoving] = useState(false)
+  const { t } = useLang()
 
   // Readouts refresh 4× per second; charts redraw every frame on their own.
   useEffect(() => {
@@ -90,9 +95,40 @@ export function DebugView() {
     return () => clearInterval(id)
   }, [status, samplesRef])
 
+  // Debug mode is for a parked car: switch off when the car moves (SPEC §16).
+  // Uses location only if permission was already given; never prompts here.
+  useEffect(() => {
+    if (status !== 'running' || navigator.permissions === undefined) return
+    let monitor: ReturnType<typeof startSpeedMonitor> | null = null
+    let timer: ReturnType<typeof setInterval> | null = null
+    let cancelled = false
+    navigator.permissions
+      .query({ name: 'geolocation' })
+      .then((p) => {
+        if (cancelled || p.state !== 'granted') return
+        monitor = startSpeedMonitor(DEFAULT_CONFIG.speed.debugOffAboveKmh)
+        timer = setInterval(() => {
+          const kmh = monitor?.speedKmh() ?? null
+          if (kmh !== null && kmh > DEFAULT_CONFIG.speed.debugOffAboveKmh) {
+            stop()
+            setStoppedMoving(true)
+          }
+        }, 1000)
+      })
+      .catch(() => {
+        // Permission API unavailable: rely on the banner.
+      })
+    return () => {
+      cancelled = true
+      if (timer !== null) clearInterval(timer)
+      monitor?.stop()
+    }
+  }, [status, stop])
+
   return (
     <section className="debug">
-      <p className="banner">Debug mode — parked or at a desk only. Never use it while driving.</p>
+      <p className="banner">{t('debug.banner')}</p>
+      {stoppedMoving && <p className="error" role="alert">{t('debug.moving')}</p>}
 
       <div className="row">
         <button type="button" onClick={() => void start()} disabled={status === 'starting' || status === 'running'}>

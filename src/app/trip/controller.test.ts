@@ -35,6 +35,7 @@ function harness(opts: { gpu?: boolean; cameraError?: CameraError; engineFails?:
   let visibility: ((hidden: boolean) => void) | null = null
   let onStall: (() => void) | null = null
   let armed = true
+  let battery: ((b: { level: number; charging: boolean }) => void) | null = null
   const preferArgs: ({ x: number; y: number } | null | undefined)[] = []
   const realDog = createWatchdog(DEFAULT_CONFIG.watchdog.stallMs, DEFAULT_CONFIG.watchdog.startupMs)
 
@@ -45,6 +46,7 @@ function harness(opts: { gpu?: boolean; cameraError?: CameraError; engineFails?:
     stopAlarm: () => void calls.push('alarmStop'),
     chime: (k) => void calls.push(`chime:${k}`),
     speak: (m) => void calls.push(`speak:${m}`),
+    setLanguage: (l) => void calls.push(`lang:${l}`),
     dispose: () => {},
   }
 
@@ -104,6 +106,8 @@ function harness(opts: { gpu?: boolean; cameraError?: CameraError; engineFails?:
       },
     },
     now: () => clock,
+    watchBattery: (cb) => ((battery = cb), () => {}),
+    notify: (k) => void calls.push(`notify:${k}`),
   }
 
   const ctl = createTripController(deps)
@@ -119,8 +123,11 @@ function harness(opts: { gpu?: boolean; cameraError?: CameraError; engineFails?:
     setArmed(v: boolean) {
       armed = v
     },
-    async start(useLocation = false) {
-      ctl.start({} as HTMLVideoElement, { useLocation })
+    setBattery(level: number, charging: boolean) {
+      battery?.({ level, charging })
+    },
+    async start(useLocation = false, notifyWhenPaused = false) {
+      ctl.start({} as HTMLVideoElement, { useLocation, notifyWhenPaused })
       await settle()
       await settle()
     },
@@ -213,7 +220,6 @@ describe('trip controller: setup and calibration problems', () => {
     const h = harness({ cameraError: new CameraError('denied', 'no') })
     await h.start()
     expect(h.ctl.getSnapshot().session.fault).toBe('CAMERA_DENIED')
-    expect(h.ctl.getSnapshot().faultMessage).toMatch(/permission/i)
     h.ctl.retry()
     expect(h.phase).toBe('IDLE')
   })
@@ -230,7 +236,7 @@ describe('trip controller: setup and calibration problems', () => {
     await h.run(16_000, { faceFound: false, luma: 10 })
     const s = h.ctl.getSnapshot()
     expect(s.session.fault).toBe('SETUP_FAILED')
-    expect(s.faultMessage).toMatch(/too dark/i)
+    expect(s.faultHint).toBe('dark')
     h.ctl.retry()
     expect(h.phase).toBe('SETUP_CHECK')
   })
@@ -239,7 +245,7 @@ describe('trip controller: setup and calibration problems', () => {
     const h = harness()
     await h.start()
     await h.run(16_000, { area: 0.01 })
-    expect(h.ctl.getSnapshot().faultMessage).toMatch(/closer/i)
+    expect(h.ctl.getSnapshot().faultHint).toBe('small')
   })
 
   it('no blinks during calibration: 3 attempts, then continues with approximate values', async () => {
@@ -383,3 +389,54 @@ describe('trip controller: GPU warm-up', () => {
     expect(h.calls.filter((c) => c.startsWith('engine.start'))).toHaveLength(1)
   })
 })
+
+describe('trip controller: battery and notifications (F18, F10)', () => {
+  it('warns once by voice when the battery is low and not charging', async () => {
+    const h = harness()
+    await toMonitoring(h)
+    h.setBattery(0.5, false)
+    h.setBattery(0.1, false)
+    h.setBattery(0.09, false)
+    expect(h.ctl.getSnapshot().batteryLow).toBe(true)
+    expect(h.calls.filter((c) => c === 'speak:batteryLow')).toHaveLength(1)
+    h.setBattery(0.09, true)
+    expect(h.ctl.getSnapshot().batteryLow).toBe(false)
+  })
+
+  it('a low battery before monitoring is announced when monitoring starts', async () => {
+    const h = harness()
+    await h.start()
+    h.setBattery(0.1, false)
+    expect(h.calls).not.toContain('speak:batteryLow')
+    await h.run(SETUP_MS)
+    for (let i = 0; i < 4; i++) {
+      await h.run(1800)
+      await h.run(200, { ear: 0.05, blink: 0.95 })
+    }
+    await h.run(500)
+    expect(h.calls).toContain('speak:batteryLow')
+  })
+
+  it('shows a notification when the app is hidden during monitoring, if enabled', async () => {
+    const h = harness()
+    await h.start(false, true)
+    await h.setHidden(true) // not monitoring yet: no notification
+    await h.setHidden(false)
+    expect(h.calls).not.toContain('notify:paused')
+    await h.run(SETUP_MS)
+    for (let i = 0; i < 4; i++) {
+      await h.run(1800)
+      await h.run(200, { ear: 0.05, blink: 0.95 })
+    }
+    await h.run(500)
+    await h.setHidden(true)
+    expect(h.calls).toContain('notify:paused')
+  })
+
+  it('passes the voice language to the audio engine', () => {
+    const h = harness()
+    h.ctl.setLanguage('vi')
+    expect(h.calls).toContain('lang:vi')
+  })
+})
+

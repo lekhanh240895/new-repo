@@ -469,12 +469,12 @@ Accessibility: alerts never rely on color alone (sound + pattern too), and flash
   - One Euro `beta = 0.007` (pixel-unit default) delayed blinks ~200 ms on 0–1 ratios → per-unit values (§8.5).
   - The 1 s watchdog treated GPU shader warm-up as a stall and restarted the engine forever → 10 s grace for the first frame.
   - The resolution drop fired during the GPU benchmark → only after the benchmark.
-- **Carried into M3:**
+- **M3 done → v0.1.0:** Dark Cockpit (F14), first-run disclaimer acceptance and mount guide, Vietnamese + English UI and voice, installable offline PWA (updates never applied mid-trip), strict CSP, battery warning (F18), pause notification (F10), Debug mode switches off when the car moves.
+- **Found in M3:** a CSP `<meta>` tag does not apply to Web Workers (they take CSP from their own HTTP headers). The policy is now also sent as a header (`vite preview`, generated `dist/_headers`); CI tests the pipeline under it. On GitHub Pages (no headers) only the page is covered — Cloudflare Pages is recommended.
+- **Open after v0.1:**
   - Confirm the **pitch sign** on a real device (`pose.headDownSign`).
   - `EYES_HIDDEN` (sunglasses) detection from real recordings (F3).
-  - Dark Cockpit polish: hide title and tabs while monitoring, full-screen (F14).
-  - Battery warning (F18); notification when the page is hidden (F10).
-  - Vietnamese UI and voice text.
+  - Tune thresholds from real recordings and field logs (§15.3 targets); trip history (v0.2).
 
 ## 18. Review of claims in the original brief
 

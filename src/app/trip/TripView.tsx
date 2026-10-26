@@ -1,7 +1,43 @@
-import { useRef, useState, type ReactNode } from 'react'
-import type { AlertLevel } from '../../core/fsm/types.ts'
-import { calibrationRetryText, type TripSnapshot } from './controller.ts'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
+import type { AlarmLevel, Phase } from '../../core/fsm/types.ts'
+import { requestNotificationPermission } from '../../platform/notify.ts'
+import { useLang, type TextKey } from '../i18n.ts'
+import { installUpdate, usePwaState } from '../pwa.ts'
+import type { TripSnapshot } from './controller.ts'
 import { useTrip } from './useTrip.ts'
+
+const ACCEPT_KEY = 'biomonitor.accepted.v1'
+
+function readAccepted(): boolean {
+  try {
+    return localStorage.getItem(ACCEPT_KEY) === 'yes'
+  } catch {
+    return false
+  }
+}
+
+function saveAccepted(): void {
+  try {
+    localStorage.setItem(ACCEPT_KEY, 'yes')
+  } catch {
+    // Not saved: the driver is asked again next time.
+  }
+}
+
+/** Phases where the app header and tabs are hidden (Dark Cockpit, SPEC §12 F14). */
+const IMMERSIVE: ReadonlySet<Phase> = new Set<Phase>(['CALIBRATING', 'MONITORING', 'SUSPENDED', 'FAULT'])
+
+const ALARM_CLASS: Record<AlarmLevel, string> = {
+  D1: 'alarm-soft',
+  L1: 'alarm-soft',
+  D2: 'alarm-medium',
+  L2: 'alarm-medium',
+  L3: 'alarm-strong',
+}
+
+function isAlarm(level: string): level is AlarmLevel {
+  return level in ALARM_CLASS
+}
 
 /** Press and hold to act: avoids ending a trip by accident while driving (SPEC §16). */
 function HoldButton({ onHold, children, ms = 800 }: { onHold: () => void; children: ReactNode; ms?: number }) {
@@ -36,117 +72,155 @@ function HoldButton({ onHold, children, ms = 800 }: { onHold: () => void; childr
   )
 }
 
-const ALARM_CLASS: Partial<Record<AlertLevel, string>> = {
-  D1: 'alarm-soft',
-  L1: 'alarm-soft',
-  D2: 'alarm-medium',
-  L2: 'alarm-medium',
-  L3: 'alarm-strong',
-}
-
-const ALARM_TEXT: Partial<Record<AlertLevel, string>> = {
-  D1: 'Eyes on the road',
-  D2: 'Eyes on the road!',
-  L1: 'Stay awake',
-  L2: 'Wake up!',
-  L3: 'WAKE UP!',
-}
-
-function formatDuration(ms: number): string {
-  const min = Math.floor(ms / 60_000)
-  const sec = Math.floor((ms % 60_000) / 1000)
-  return `${min} min ${sec} s`
-}
-
-function SetupChecklist({ snap }: { snap: TripSnapshot }) {
+function SetupChecklist({ snap, t }: { snap: TripSnapshot; t: (k: TextKey) => string }) {
   const { setup } = snap
-  const item = (ok: boolean, label: string) => (
+  const item = (ok: boolean, key: TextKey) => (
     <li className={ok ? 'ok' : 'pending'}>
-      {ok ? '✓' : '…'} {label}
+      {ok ? '✓' : '…'} {t(key)}
     </li>
   )
   return (
     <>
       <ul className="checklist">
-        {item(setup.faceSeen, 'Face found')}
-        {item(setup.faceSeen && setup.lightOk, 'Light OK')}
-        {item(setup.faceSeen && setup.sizeOk, 'Phone close enough')}
-        {item(snap.wakeLockActive, 'Screen stays on')}
-        {item(snap.audioReady, 'Sound ready')}
+        {item(setup.faceSeen, 'setup.face')}
+        {item(setup.faceSeen && setup.lightOk, 'setup.light')}
+        {item(setup.faceSeen && setup.sizeOk, 'setup.size')}
+        {item(snap.wakeLockActive, 'setup.screen')}
+        {item(snap.audioReady, 'setup.sound')}
       </ul>
-      <p className="muted">You should have heard a beep. If not, turn the media volume up.</p>
-      {setup.hint !== null && <p className="hint" role="status">{setup.hint}</p>}
+      <p className="muted">{t('setup.beep')}</p>
+      {setup.hint !== null && <p className="hint" role="status">{t(`hint.${setup.hint}`)}</p>}
     </>
   )
 }
 
-function Summary({ snap }: { snap: TripSnapshot }) {
+function Summary({ snap, t }: { snap: TripSnapshot; t: (k: TextKey) => string }) {
   const { session } = snap
   const stats = session.monitoring.stats
-  const duration = (session.tripEndedAt ?? 0) - (session.tripStartedAt ?? 0)
+  const ms = Math.max(0, (session.tripEndedAt ?? 0) - (session.tripStartedAt ?? 0))
   const microsleeps = stats.alarms.L1 + stats.alarms.L2 + stats.alarms.L3
   const distractions = stats.alarms.D1 + stats.alarms.D2
+  const duration = `${Math.floor(ms / 60_000)} ${t('unit.min')} ${Math.floor((ms % 60_000) / 1000)} ${t('unit.sec')}`
   return (
-    <dl className="summary">
-      <div><dt>Trip time</dt><dd>{formatDuration(duration)}</dd></div>
-      <div><dt>Microsleep alerts</dt><dd>{microsleeps}</dd></div>
-      <div><dt>Eyes-off-road alerts</dt><dd>{distractions}</dd></div>
-      <div><dt>Longest eye closure</dt><dd>{(stats.longestClosureMs / 1000).toFixed(1)} s</dd></div>
-    </dl>
+    <>
+      <dl className="summary">
+        <div><dt>{t('summary.time')}</dt><dd>{duration}</dd></div>
+        <div><dt>{t('summary.microsleep')}</dt><dd>{microsleeps}</dd></div>
+        <div><dt>{t('summary.distraction')}</dt><dd>{distractions}</dd></div>
+        <div><dt>{t('summary.longest')}</dt><dd>{(stats.longestClosureMs / 1000).toFixed(1)} {t('unit.sec')}</dd></div>
+      </dl>
+      <p className={microsleeps > 0 ? 'hint' : 'muted'}>
+        {microsleeps > 0 ? t('summary.rest') : microsleeps + distractions === 0 ? t('summary.noAlerts') : ''}
+      </p>
+    </>
   )
 }
 
-/**
- * Trip screen (M2: functional). The polished Dark Cockpit design comes in M3.
- */
+function exitFullscreen() {
+  if (document.fullscreenElement) void document.exitFullscreen().catch(() => {})
+}
+
+/** The trip screen: start, setup, calibration, Dark Cockpit monitoring, faults, summary. */
 export function TripView() {
   const { controller, snapshot: snap } = useTrip()
+  const { lang, t } = useLang()
+  const pwa = usePwaState()
   const videoRef = useRef<HTMLVideoElement | null>(null)
+  const [accepted, setAccepted] = useState(readAccepted)
   const [useLocation, setUseLocation] = useState(false)
+  const [notify, setNotify] = useState(false)
   const { phase } = snap.session
   const alert = snap.session.monitoring.alert
-  const alarmClass = phase === 'MONITORING' ? (ALARM_CLASS[alert] ?? '') : ''
+  const immersive = IMMERSIVE.has(phase)
+  const alarmClass = phase === 'MONITORING' && isAlarm(alert) ? ALARM_CLASS[alert] : ''
+
+  useEffect(() => controller.setLanguage(lang), [controller, lang])
+
+  // Dark Cockpit: hide the app chrome; leave full screen when the trip ends.
+  useEffect(() => {
+    document.body.classList.toggle('immersive', immersive)
+    if (phase === 'SUMMARY' || phase === 'IDLE') exitFullscreen()
+    return () => document.body.classList.remove('immersive')
+  }, [immersive, phase])
 
   const start = () => {
     const video = videoRef.current
-    if (video === null) return
+    if (video === null || !accepted) return
     const params = new URLSearchParams(window.location.search)
+    // All of this must happen inside the tap: full screen, audio, camera, notifications.
+    void document.documentElement.requestFullscreen?.({ navigationUI: 'hide' }).catch(() => {})
+    if (notify) void requestNotificationPermission()
     controller.start(video, {
       useLocation,
+      notifyWhenPaused: notify,
       preferGpu: params.get('delegate') !== 'cpu',
       preferWorker: params.get('worker') !== '0',
     })
   }
 
   return (
-    <section className={`trip phase-${phase.toLowerCase()} ${alarmClass}`}>
+    <section className={`trip phase-${phase.toLowerCase()} ${immersive ? 'cockpit-screen' : ''} ${alarmClass}`}>
       {/* Kept mounted so frames keep flowing; only visible during the setup check. */}
       <video ref={videoRef} className={phase === 'SETUP_CHECK' ? 'setup-preview' : 'hidden-video'} muted playsInline />
 
       {phase === 'IDLE' && (
         <>
+          {pwa.updateReady && (
+            <div className="update" role="status">
+              <span>{t('idle.update')}</span>
+              <button type="button" onClick={installUpdate}>{t('idle.updateNow')}</button>
+            </div>
+          )}
           <div className="disclaimer">
-            <p><strong>Not a certified safety device.</strong> It does not replace rest. You stay fully responsible for driving safely.</p>
-            <p>Daytime only: the phone camera cannot see your face in the dark. Keep this app open in front.</p>
+            <p><strong>{t('idle.disclaimerTitle')}</strong> {t('idle.disclaimerBody')}</p>
+            <p>{t('idle.limits')}</p>
+            <p className="muted">{t('idle.privacy')}</p>
+            <label className="toggle">
+              <input
+                type="checkbox"
+                checked={accepted}
+                onChange={(e) => {
+                  setAccepted(e.target.checked)
+                  if (e.target.checked) saveAccepted()
+                }}
+              />
+              {t('idle.accept')}
+            </label>
           </div>
+          <details className="mount">
+            <summary>{t('idle.mountTitle')}</summary>
+            <ol>
+              <li>{t('idle.mount1')}</li>
+              <li>{t('idle.mount2')}</li>
+              <li>{t('idle.mount3')}</li>
+              <li>{t('idle.mount4')}</li>
+            </ol>
+          </details>
           <label className="toggle">
             <input type="checkbox" checked={useLocation} onChange={(e) => setUseLocation(e.target.checked)} />
-            Use location to stay quiet when the car is stopped
+            {t('idle.location')}
           </label>
-          <button type="button" className="primary" onClick={start}>Start trip</button>
+          <label className="toggle">
+            <input type="checkbox" checked={notify} onChange={(e) => setNotify(e.target.checked)} />
+            {t('idle.notify')}
+          </label>
+          <button type="button" className="primary" onClick={start} disabled={!accepted}>
+            {t('idle.start')}
+          </button>
+          {pwa.offlineReady && <p className="muted small">{t('idle.offline')}</p>}
         </>
       )}
 
-      {phase === 'PERMISSIONS' && <p className="status">Starting the camera…</p>}
-      {phase === 'LOADING' && <p className="status">Loading face tracking…</p>}
+      {phase === 'PERMISSIONS' && <p className="status">{t('status.permissions')}</p>}
+      {phase === 'LOADING' && <p className="status">{t('status.loading')}</p>}
 
-      {phase === 'SETUP_CHECK' && <SetupChecklist snap={snap} />}
+      {phase === 'SETUP_CHECK' && <SetupChecklist snap={snap} t={t} />}
 
       {phase === 'CALIBRATING' && (
         <div className="calibrating">
-          <p className="big">Look at the road and blink normally.</p>
+          <p className="big">{t('calib.prompt')}</p>
           {snap.calibration.attempt > 1 && snap.calibration.retryReason !== null && (
-            <p className="hint">{calibrationRetryText(snap.calibration.retryReason)}</p>
+            <p className="hint">{t(`calib.retry.${snap.calibration.retryReason}`)}</p>
           )}
           <progress max={1} value={snap.calibration.progress} />
         </div>
@@ -154,51 +228,66 @@ export function TripView() {
 
       {phase === 'MONITORING' && (
         <div className="cockpit">
-          <span className={`dot dot-${snap.hud}`} aria-label={`Status: ${snap.hud}`} />
-          {alarmClass !== '' && (
-            <div className="alarm-panel" role="alert">
-              <p className="alarm-text">{ALARM_TEXT[alert]}</p>
-              <button type="button" className="primary" onClick={() => controller.ackAwake()}>I'm awake</button>
-            </div>
-          )}
-          {(alert === 'ADVISORY' || alert === 'STRONG_ADVISORY') && (
-            <p className="advisory" role="status">
-              {alert === 'STRONG_ADVISORY' ? 'You are tired. Please stop at a safe place.' : 'Signs of fatigue. Plan a break soon.'}
-            </p>
-          )}
-          {!snap.audioReady && <p className="hint">Sound is blocked: visual alerts only.</p>}
-          {snap.calibration.approximate && <p className="muted small">Calibration is approximate.</p>}
-          {snap.needsRecalibration && !snap.recalibrating && (
-            <button type="button" onClick={() => controller.recalibrate()}>Phone moved? Re-calibrate</button>
-          )}
-          {snap.recalibrating && <p className="muted small">Re-calibrating… look at the road.</p>}
-          <HoldButton onHold={() => controller.endTrip()}>Hold to end trip</HoldButton>
+          <span className={`dot dot-${snap.hud}`} role="img" aria-label={t(`hud.${snap.hud}`)} />
+          <div className="cockpit-center">
+            {isAlarm(alert) && (
+              <div className="alarm-panel" role="alert">
+                <p className="alarm-text">{t(`alarm.${alert}`)}</p>
+                <button type="button" className="primary" onClick={() => controller.ackAwake()}>
+                  {t('alarm.ack')}
+                </button>
+              </div>
+            )}
+            {!isAlarm(alert) && snap.hud === 'off' && <p className="cockpit-note" role="status">{t('cockpit.notMonitoring')}</p>}
+            {(alert === 'ADVISORY' || alert === 'STRONG_ADVISORY') && (
+              <p className="advisory" role="status">
+                {t(alert === 'STRONG_ADVISORY' ? 'advisory.strong' : 'advisory.normal')}
+              </p>
+            )}
+            {!snap.audioReady && <p className="hint">{t('cockpit.noSound')}</p>}
+            {snap.batteryLow && <p className="hint">{t('cockpit.battery')}</p>}
+            {snap.needsRecalibration && !snap.recalibrating && (
+              <button type="button" onClick={() => controller.recalibrate()}>{t('cockpit.recalibrate')}</button>
+            )}
+            {snap.recalibrating && <p className="cockpit-note">{t('cockpit.recalibrating')}</p>}
+          </div>
+          <div className="cockpit-footer">
+            {snap.calibration.approximate && <p className="cockpit-note small">{t('cockpit.approx')}</p>}
+            <HoldButton onHold={() => controller.endTrip()}>{t('cockpit.end')}</HoldButton>
+          </div>
         </div>
       )}
 
-      {phase === 'SUSPENDED' && <p className="status">Monitoring paused. Come back to this app to continue.</p>}
+      {phase === 'SUSPENDED' && <p className="status">{t('suspended')}</p>}
 
       {phase === 'FAULT' && (
         <div className="fault" role="alert">
-          <p className="big">Monitoring is off</p>
-          <p>{snap.faultMessage ?? 'Something went wrong.'}</p>
+          <p className="big">{t('fault.title')}</p>
+          <p>{snap.faultHint !== null ? t(`hint.${snap.faultHint}`) : t(`fault.${snap.session.fault ?? 'SETUP_FAILED'}`)}</p>
+          {snap.faultGaveUp && <p className="hint">{t('fault.gaveUp')}</p>}
+          {snap.faultDetail !== null && <p className="muted small">{snap.faultDetail}</p>}
           <div className="row">
-            <button type="button" className="primary" onClick={() => controller.retry()}>Try again</button>
-            <button type="button" onClick={() => controller.endTrip()}>End trip</button>
+            {!snap.faultGaveUp && (
+              <button type="button" className="primary" onClick={() => controller.retry()}>{t('fault.retry')}</button>
+            )}
+            <button type="button" onClick={() => controller.endTrip()}>{t('fault.end')}</button>
           </div>
         </div>
       )}
 
       {phase === 'SUMMARY' && (
         <>
-          <h2>Trip summary</h2>
-          <Summary snap={snap} />
-          <button type="button" className="primary" onClick={() => controller.reset()}>New trip</button>
+          <h2>{t('summary.title')}</h2>
+          <Summary snap={snap} t={t} />
+          <button type="button" className="primary" onClick={() => controller.reset()}>{t('summary.new')}</button>
         </>
       )}
 
-      {snap.backend !== null && phase !== 'MONITORING' && (
-        <p className="muted small">Face tracking: {snap.backend}{snap.frameWidth !== 480 ? ` · ${snap.frameWidth}px` : ''}</p>
+      {snap.backend !== null && !immersive && phase !== 'IDLE' && (
+        <p className="muted small">
+          {snap.backend}
+          {snap.frameWidth !== 480 ? ` · ${snap.frameWidth}px` : ''}
+        </p>
       )}
     </section>
   )

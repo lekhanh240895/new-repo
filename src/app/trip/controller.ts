@@ -13,7 +13,7 @@ import type { Effect, FaultReason, SessionEvent, SessionState } from '../../core
 import { createQualityTracker } from '../../core/signals/quality.ts'
 import { createSignalSmoother } from '../../core/signals/smoothing.ts'
 import type { FrameResult, ProcessedFrame } from '../../core/types.ts'
-import type { AudioEngine } from '../../platform/audio.ts'
+import type { AudioEngine, VoiceLang } from '../../platform/audio.ts'
 import { CameraError, type CameraHandle, type CameraOptions } from '../../platform/camera.ts'
 import type { ScreenWakeLock, VibrationKind } from '../../platform/device.ts'
 import type { FrameLoop, FrameLoopOptions } from '../../platform/frameLoop.ts'
@@ -32,7 +32,19 @@ export interface TripDeps {
   startSpeedMonitor(armAboveKmh: number): SpeedMonitor;
   watchdog: Watchdog;
   now(): number;
+  /** Optional: battery updates (Chromium only). Returns an unsubscribe function. */
+  watchBattery?(onChange: (state: BatteryState) => void): () => void;
+  /** Optional: a system notification, because sound may not play while the page is hidden. */
+  notify?(kind: 'paused'): void;
 }
+
+export interface BatteryState {
+  /** 0–1 */
+  level: number;
+  charging: boolean;
+}
+
+const BATTERY_LOW = 0.15
 
 export interface TripOptions {
   /** Ask for location so alarms stay quiet when the car is stopped (SPEC §10.6). */
@@ -40,6 +52,8 @@ export interface TripOptions {
   /** Force the CPU model / main-thread fallback (Debug switches). */
   preferGpu?: boolean;
   preferWorker?: boolean;
+  /** Show a notification when monitoring pauses because the app was hidden (SPEC §12 F10). */
+  notifyWhenPaused?: boolean;
 }
 
 export interface SetupStatus {
@@ -47,7 +61,7 @@ export interface SetupStatus {
   lightOk: boolean;
   sizeOk: boolean;
   /** What to fix, when setup is slow or failed. */
-  hint: string | null;
+  hint: SetupHint | null;
 }
 
 export interface CalibrationStatus {
@@ -70,8 +84,14 @@ export interface TripSnapshot {
   audioReady: boolean;
   wakeLockActive: boolean;
   speedKmh: number | null;
-  /** Human-readable reason for a FAULT. */
-  faultMessage: string | null;
+  /** For a setup FAULT: what to fix. */
+  faultHint: SetupHint | null;
+  /** Technical detail for a FAULT (not translated; shown small). */
+  faultDetail: string | null;
+  /** Recovery attempts are used up: the driver must restart the trip. */
+  faultGaveUp: boolean;
+  /** Battery under 15% and not charging (SPEC §12 F18). */
+  batteryLow: boolean;
   needsRecalibration: boolean;
   recalibrating: boolean;
   log: readonly string[];
@@ -89,35 +109,14 @@ export interface TripController {
   retry(): void;
   /** Learn a new baseline in the background while monitoring continues. */
   recalibrate(): void;
+  /** Voice language for alerts. */
+  setLanguage(lang: VoiceLang): void;
   /** Stop all devices and return to IDLE. The controller can be started again. */
   dispose(): void;
 }
 
-const HINTS = {
-  noFace: "Can't see your face. Point the camera at you, at eye level.",
-  dark: 'Too dark. Monitoring needs light on your face.',
-  bright: 'Too bright or backlit. Adjust the mount to avoid glare.',
-  small: 'Your face is too small in the picture. Move the phone closer.',
-} as const
-
-const CALIBRATION_RETRY_TEXT: Record<CalibrationFailure, string> = {
-  'too-few-valid': "Couldn't see you clearly. Look at the road.",
-  moving: 'Please hold your head still and look at the road.',
-  'no-blinks': 'Please blink normally.',
-}
-
-export function calibrationRetryText(reason: CalibrationFailure): string {
-  return CALIBRATION_RETRY_TEXT[reason]
-}
-
-const FAULT_TEXT: Record<FaultReason, string> = {
-  CAMERA_DENIED: 'Camera permission was denied. Allow the camera in your browser settings, then start again.',
-  CAMERA_LOST: 'The camera stopped or could not start.',
-  MODEL_FAILED: 'The face model could not load.',
-  WORKER_STALLED: 'Face tracking stopped responding.',
-  AUDIO_BLOCKED: 'Sound is blocked.',
-  SETUP_FAILED: 'Setup check failed.',
-}
+/** What to fix during setup. The UI turns these into text in the current language. */
+export type SetupHint = 'noFace' | 'dark' | 'bright' | 'small'
 
 const SNAPSHOT_THROTTLE_MS = 250
 /** Delegate benchmark: skip warm-up frames, and decide early when the GPU is clearly slow. */
@@ -140,7 +139,10 @@ export function initialTripSnapshot(cfg: Config = DEFAULT_CONFIG, s: SessionStat
     audioReady: false,
     wakeLockActive: false,
     speedKmh: null,
-    faultMessage: null,
+    faultHint: null,
+    faultDetail: null,
+    faultGaveUp: false,
+    batteryLow: false,
     needsRecalibration: false,
     recalibrating: false,
     log: [],
@@ -160,6 +162,8 @@ export function createTripController(deps: TripDeps, cfg: Config = DEFAULT_CONFI
   let loop: FrameLoop | null = null
   let speed: SpeedMonitor | null = null
   let stopVisibility: (() => void) | null = null
+  let stopBattery: (() => void) | null = null
+  let batteryWarned = false
 
   let smoother = createSignalSmoother()
   let quality = createQualityTracker(cfg.quality)
@@ -195,6 +199,15 @@ export function createTripController(deps: TripDeps, cfg: Config = DEFAULT_CONFI
   function log(message: string) {
     console.info(`BioMonitor: ${message}`)
     publish({ log: [...snap.log.slice(-(LOG_SIZE - 1)), message] })
+  }
+
+  /** Speak the battery warning once per trip, only while monitoring. */
+  function warnBatteryIfNeeded() {
+    if (snap.batteryLow && !batteryWarned && session.phase === 'MONITORING') {
+      batteryWarned = true
+      deps.audio.speak('batteryLow')
+      log('battery low and not charging')
+    }
   }
 
   // ---------------------------------------------------------------- dispatch
@@ -265,6 +278,7 @@ export function createTripController(deps: TripDeps, cfg: Config = DEFAULT_CONFI
         return
       case 'MONITORING':
         if (prev === 'SUSPENDED' || prev === 'FAULT') quality.reset()
+        warnBatteryIfNeeded()
         return
       case 'SUMMARY':
       case 'IDLE':
@@ -290,7 +304,6 @@ export function createTripController(deps: TripDeps, cfg: Config = DEFAULT_CONFI
       if (cancelled()) return
       if (err instanceof CameraError && err.kind === 'denied') {
         dispatch({ type: 'PERMISSIONS_DENIED', t: deps.now() })
-        publish({ faultMessage: FAULT_TEXT.CAMERA_DENIED })
       } else {
         faultWith('CAMERA_LOST', err instanceof Error ? err.message : String(err))
       }
@@ -310,7 +323,6 @@ export function createTripController(deps: TripDeps, cfg: Config = DEFAULT_CONFI
     }
     if (!engineOk) {
       dispatch({ type: 'MODEL_FAILED', t: deps.now() })
-      publish({ faultMessage: FAULT_TEXT.MODEL_FAILED })
       return
     }
     dispatch({ type: 'MODEL_READY', t: deps.now() })
@@ -370,7 +382,7 @@ export function createTripController(deps: TripDeps, cfg: Config = DEFAULT_CONFI
 
   function faultWith(reason: FaultReason, detail?: string) {
     dispatch({ type: 'FAULT', t: deps.now(), reason })
-    publish({ faultMessage: detail ? `${FAULT_TEXT[reason]} (${detail})` : FAULT_TEXT[reason] })
+    publish({ faultDetail: detail ?? null })
   }
 
   // ---------------------------------------------------------------- faults & recovery
@@ -396,7 +408,7 @@ export function createTripController(deps: TripDeps, cfg: Config = DEFAULT_CONFI
       }
       startLoop()
       dispatch({ type: 'RECOVERED', t: deps.now() })
-      publish({ faultMessage: null })
+      publish({ faultHint: null, faultDetail: null, faultGaveUp: false })
       return true
     } catch (err) {
       log(`camera recovery failed: ${err instanceof Error ? err.message : String(err)}`)
@@ -430,11 +442,11 @@ export function createTripController(deps: TripDeps, cfg: Config = DEFAULT_CONFI
           frameErrors = 0
           startLoop()
           dispatch({ type: 'RECOVERED', t: deps.now() })
-          publish({ faultMessage: null })
+          publish({ faultHint: null, faultDetail: null, faultGaveUp: false })
           return true
         }
       }
-      publish({ faultMessage: `${FAULT_TEXT.WORKER_STALLED} Restart the trip.` })
+      publish({ faultGaveUp: true })
       return false
     } finally {
       busyRecovering = false
@@ -550,12 +562,12 @@ export function createTripController(deps: TripDeps, cfg: Config = DEFAULT_CONFI
     const sizeOk = !faceSeen || q.faceAreaRatio >= cfg.quality.minFaceAreaRatio
     const good = faceSeen && lightOk && sizeOk && frame.frameValid && tune.phase === 'done'
     setupOkSince = good ? (setupOkSince ?? t) : null
-    const hint = !faceSeen
-      ? (q.faceLuma < cfg.quality.minFaceLuma ? HINTS.dark : HINTS.noFace)
+    const hint: SetupHint | null = !faceSeen
+      ? (q.faceLuma < cfg.quality.minFaceLuma ? 'dark' : 'noFace')
       : !lightOk
-        ? (q.faceLuma < cfg.quality.minFaceLuma ? HINTS.dark : HINTS.bright)
+        ? (q.faceLuma < cfg.quality.minFaceLuma ? 'dark' : 'bright')
         : !sizeOk
-          ? HINTS.small
+          ? 'small'
           : null
 
     const start = setupStart ?? t
@@ -565,7 +577,7 @@ export function createTripController(deps: TripDeps, cfg: Config = DEFAULT_CONFI
     } else if (t - start >= cfg.setup.timeoutMs) {
       publish({ setup: { faceSeen, lightOk, sizeOk, hint } })
       dispatch({ type: 'SETUP_FAILED', t })
-      publish({ faultMessage: hint ?? FAULT_TEXT.SETUP_FAILED })
+      publish({ faultHint: hint })
     } else {
       // Show hints only after a moment, so they do not flash while the camera settles.
       publish({ setup: { faceSeen, lightOk, sizeOk, hint: t - start > 3000 ? hint : null } })
@@ -659,8 +671,16 @@ export function createTripController(deps: TripDeps, cfg: Config = DEFAULT_CONFI
       pipeline = null
       baseline = null
       tune = { phase: 'done', seen: 0, gpuMs: [], cpuMs: [] }
+      batteryWarned = false
+      stopBattery ??=
+        deps.watchBattery?.((b) => {
+          const low = b.level < BATTERY_LOW && !b.charging
+          if (low !== snap.batteryLow) publish({ batteryLow: low })
+          warnBatteryIfNeeded()
+        }) ?? null
       stopVisibility ??= deps.watchVisibility((hidden) => {
         if (hidden) {
+          if (options.notifyWhenPaused && session.phase === 'MONITORING') deps.notify?.('paused')
           deps.watchdog.stop()
           dispatch({ type: 'PAGE_HIDDEN', t: deps.now() })
         } else {
@@ -698,7 +718,7 @@ export function createTripController(deps: TripDeps, cfg: Config = DEFAULT_CONFI
       }
       if (reason === 'SETUP_FAILED') {
         dispatch({ type: 'RECOVERED', t: deps.now() })
-        publish({ faultMessage: null })
+        publish({ faultHint: null, faultDetail: null, faultGaveUp: false })
         return
       }
       if (reason === 'CAMERA_LOST') {
@@ -713,13 +733,16 @@ export function createTripController(deps: TripDeps, cfg: Config = DEFAULT_CONFI
           if (!ok) return
           dispatch({ type: 'RECOVERED', t: deps.now() })
           dispatch({ type: 'MODEL_READY', t: deps.now() })
-          publish({ faultMessage: null })
+          publish({ faultHint: null, faultDetail: null, faultGaveUp: false })
           startLoop()
         })
         return
       }
       restarts = 0
       void restartEngine()
+    },
+    setLanguage(lang) {
+      deps.audio.setLanguage(lang)
     },
     recalibrate() {
       if (session.phase !== 'MONITORING' || recalibFrames !== null) return
@@ -733,6 +756,8 @@ export function createTripController(deps: TripDeps, cfg: Config = DEFAULT_CONFI
       teardown()
       stopVisibility?.()
       stopVisibility = null
+      stopBattery?.()
+      stopBattery = null
       deps.audio.dispose()
       if (session.phase !== 'IDLE') {
         session = createSession()
