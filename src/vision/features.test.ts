@@ -9,6 +9,7 @@ import {
   meanLuma,
   MOUTH,
   mouthAspectRatio,
+  pickDriverIndex,
   poseFromMatrix,
   RIGHT_EYE,
   type EyeIndices,
@@ -138,6 +139,24 @@ describe('poseFromMatrix', () => {
   it('rejects bad input', () => {
     expect(poseFromMatrix([1, 2, 3])).toBeNull()
     expect(poseFromMatrix(new Array<number>(16).fill(Number.NaN))).toBeNull()
+  })
+})
+
+describe('pickDriverIndex (SPEC §12 F17: passenger in view)', () => {
+  const driver = { x: 0.35, y: 0.2, w: 0.3, h: 0.4 } // center (0.5, 0.4)
+  const passenger = { x: 0.7, y: 0.1, w: 0.35, h: 0.45 } // larger, off to the side
+
+  it('without calibration, picks the largest face', () => {
+    expect(pickDriverIndex([driver, passenger], null)).toBe(1)
+  })
+
+  it('after calibration, picks the face nearest the calibrated position, even if smaller', () => {
+    expect(pickDriverIndex([driver, passenger], { x: 0.5, y: 0.4 })).toBe(0)
+    expect(pickDriverIndex([passenger, driver], { x: 0.5, y: 0.4 })).toBe(1)
+  })
+
+  it('returns -1 with no faces', () => {
+    expect(pickDriverIndex([], null)).toBe(-1)
   })
 })
 

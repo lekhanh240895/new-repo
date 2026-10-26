@@ -6,8 +6,9 @@ with calm, step-by-step alerts.
 
 **No video ever leaves your device.** There is no server, no account and no analytics.
 
-> ⚠️ **Status: early development (milestone M1).** The camera pipeline and Debug mode work.
-> Alerts are not connected to the camera yet. Do not rely on it while driving.
+> ⚠️ **Status: early development (milestone M2).** The full trip flow works: setup check,
+> per-driver calibration, and microsleep / eyes-off-road / fatigue alerts. It has been
+> tested with replayed video, not yet in real driving. Do not rely on it while driving.
 
 ## Important limits
 
@@ -22,12 +23,21 @@ See the full spec: [`docs/SPEC.md`](docs/SPEC.md).
 ```
 camera → frame loop (15 fps, 480 px) → vision worker (MediaPipe Face Landmarker)
        → numbers only: EAR, blink, MAR, head pose, gaze, light, jitter
-       → One Euro smoothing → quality gates → state machine (alerts)
+       → One Euro smoothing → quality gates
+       → calibration (your own baseline) → detectors (eyes closed, off road, PERCLOS, yawns, nods)
+       → state machine → alerts (sound, voice, vibration, screen)
 ```
+
+A trip goes: **Start** → setup check (face, light, distance, beep) → 8 s calibration
+("look at the road, blink normally") → monitoring. Alerts step up from a soft beep
+(eyes closed 1 s) to a loud alarm (2 s), and stop by themselves 2 s after your eyes open.
 
 - The model and wasm files are **self-hosted** and checked against SHA-256 hashes in `assets.lock.json`. Nothing loads from a CDN at runtime.
 - If the worker can't start (for example on some iOS versions), the model runs on the main thread instead.
 - The state machine (`src/core/fsm`) is pure TypeScript and fully unit-tested with scripted signal traces.
+- The trip controller (`src/app/trip/controller.ts`) gets every device service injected, so the whole
+  flow — including camera loss, stalls and app switching — is tested in Node with fakes.
+- How each of the 20 failure modes is handled and tested: [`docs/FAILURE_MODES.md`](docs/FAILURE_MODES.md).
 
 ## Develop
 
@@ -75,18 +85,27 @@ npm run replay -- --clip clips/my-clip.y4m --seconds 10
 # → replay-out/my-clip.json
 ```
 
+Trip mode runs the whole trip flow on the clip and records the phase and alert timeline:
+
+```bash
+npm run replay -- --mode trip --clip clips/my-clip.y4m --seconds 40 --expect-alerts L1,L2,L3
+```
+
 `clips/` and `replay-out/` are git-ignored. **Never commit videos of real people.**
 `npm run smoke` runs the same harness on a generated dark clip (used in CI).
 
 ### Project layout
 
 ```
-src/core/       pure TypeScript: config, types, filters, quality gates, state machine (no DOM)
-src/vision/     MediaPipe wrapper, feature math, worker, engine (worker + main-thread fallback)
-src/platform/   camera, frame loop
-src/app/        React UI (Trip demo, Debug mode)
-scripts/        asset fetch + hash check, replay harness, test clip generator
-docs/SPEC.md    product and technical spec
+src/core/            pure TypeScript (no DOM): config, types, filters, quality gates,
+                     calibration, detectors, state machine
+src/vision/          MediaPipe wrapper, feature math, worker, engine (worker + main-thread fallback)
+src/platform/        camera, frame loop, audio, wake lock, vibration, speed, watchdog
+src/app/trip/        trip controller + Trip screen
+src/app/debug/       Debug mode
+scripts/             asset fetch + hash check, replay harness, test clip generator
+docs/SPEC.md         product and technical spec
+docs/FAILURE_MODES.md  failure-mode coverage
 ```
 
 Code rules: TypeScript strict, function components, no default exports.
@@ -97,7 +116,7 @@ Code rules: TypeScript strict, function components, no default exports.
 | --- | --- |
 | **M0** ✅ | Tooling, CI, core types, config, state machine + tests |
 | **M1** ✅ | Camera, vision worker + fallback, signals, quality gates, Debug mode, replay harness |
-| M2 | Calibration, detectors, audio alerts, Wake Lock, watchdog; connect the camera to the state machine |
+| **M2** ✅ | Calibration, detectors, alerts (sound, voice, vibration), Wake Lock, watchdog, trip controller |
 | M3 | Dark Cockpit UI, offline PWA, v0.1 release |
 
 ## License

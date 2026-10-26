@@ -10,8 +10,11 @@ export type Backend = `${'worker' | 'main'}-${Lowercase<Delegate>}`
 
 export interface VisionEngine {
   readonly backend: Backend;
-  /** Takes ownership of `image` (it is closed or transferred). */
-  process(image: ImageBitmap, t: number, debug: boolean): Promise<FrameResult>;
+  /**
+   * Takes ownership of `image` (it is closed or transferred).
+   * `prefer`: calibrated face center, to pick the driver when 2 faces are seen.
+   */
+  process(image: ImageBitmap, t: number, debug: boolean, prefer?: { x: number; y: number } | null): Promise<FrameResult>;
   dispose(): void;
 }
 
@@ -102,7 +105,7 @@ async function startWorker(options: AnalyzerOptions, timeoutMs: number, onFatal:
 
   return {
     backend: delegate === 'GPU' ? 'worker-gpu' : 'worker-cpu',
-    process(image, t, debug) {
+    process(image, t, debug, prefer = null) {
       if (dead) {
         image.close()
         return Promise.reject(new Error('vision worker is not running'))
@@ -110,7 +113,7 @@ async function startWorker(options: AnalyzerOptions, timeoutMs: number, onFatal:
       const id = nextId++
       return new Promise<FrameResult>((resolve, reject) => {
         pending.set(id, { resolve, reject })
-        post({ type: 'frame', id, t, debug, image }, [image])
+        post({ type: 'frame', id, t, debug, prefer, image }, [image])
       })
     },
     dispose() {
@@ -127,9 +130,9 @@ async function startMainThread(options: AnalyzerOptions): Promise<VisionEngine> 
   const analyzer = await createFaceAnalyzer({ ...options, useModuleLoader: false })
   return {
     backend: analyzer.delegate === 'GPU' ? 'main-gpu' : 'main-cpu',
-    process(image, t, debug) {
+    process(image, t, debug, prefer = null) {
       try {
-        return Promise.resolve(analyzer.analyze(image, t, debug))
+        return Promise.resolve(analyzer.analyze(image, t, debug, prefer))
       } catch (err) {
         return Promise.reject(err instanceof Error ? err : new Error(String(err)))
       } finally {

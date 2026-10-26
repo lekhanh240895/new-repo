@@ -220,7 +220,7 @@ All signals are computed per frame. Every signal carries a `valid` flag. Detecto
 ### 8.5 Filtering
 
 - Apply the **One Euro filter** to the **derived signals** (`openFused`, `mar`, pitch/yaw/roll, gaze), not to all 478 points. This is cheaper, and blinks stay sharp.
-- Start values: `minCutoff = 1.0 Hz`, `beta = 0.007`, `dCutoff = 1.0 Hz`. Tune with replay data.
+- Values depend on units (`core/signals/smoothing.ts`): ratios (EAR, blink, MAR, jaw) `minCutoff 1.5 Hz, beta 4`; angles in degrees `minCutoff 1 Hz, beta 0.05`; gaze `minCutoff 1 Hz, beta 1`. The textbook `beta = 0.007` is for pixel coordinates; on 0–1 ratios it delayed blinks by ~200 ms, which delayed every microsleep alarm. A test checks that a closing eye is followed within about one frame.
 
 ### 8.6 Quality gates (when a frame is invalid)
 
@@ -244,7 +244,7 @@ All signals are computed per frame. Every signal carries a `valid` flag. Detecto
   - fewer than 70% of frames are valid.
 
   If rejected, retry up to 3 times, then let the driver continue with population defaults and a "less accurate" notice.
-- **Online update:** a slow quantile tracker updates `EAR_open` (90th percentile over the last 5 min of valid frames). It only updates while no alert is active and PERCLOS is low. Max drift: ±15% from the calibrated value. This stops the baseline from "learning" drowsiness as normal.
+- **Online update:** a slow tracker updates `EAR_open` with the same statistic as calibration (median of open-eye frames) over the last 5 min, sampled twice per second. It only updates while no alarm is active, PERCLOS is below the advisory level, and the eyes are open. Max drift: ±15% from the calibrated value. This stops the baseline from "learning" drowsiness as normal.
 - **Re-calibrate prompt:** when the pose baseline shifts by more than 15° for more than 30 s (the phone mount moved).
 
 ## 10. Detection rules
@@ -464,12 +464,17 @@ Accessibility: alerts never rely on color alone (sound + pattern too), and flash
 
 - **M0 done.** State machine + golden-trace tests.
 - **M1 done** (verified in headless Chromium with the replay harness): worker and main-thread backends, GPU and CPU delegates, quality gates (including "no face + dark frame → LOW_VISIBILITY"), Debug mode, replay harness, CI smoke test.
-- **Carried into M2:**
-  - Confirm the **pitch sign** on a real device (nod down in Debug mode; pitch should go negative). A flat test photo cannot nod.
-  - Pick GPU or CPU with a short start-up benchmark. In headless Chromium without a GPU, the emulated GPU was much slower than CPU (~360 ms vs ~40 ms per frame).
-  - `EYES_HIDDEN` (sunglasses) detection needs real recordings first.
-  - Choose the driver face by calibrated position, not just "largest face" (F17).
-  - Watchdog (F20) and adaptive resolution (F6).
+- **M2 done** (verified with controller tests and real-model trip replays): calibration with retries and fallback, all detectors, alerts, Wake Lock, visibility, speed arming, watchdog with GPU warm-up grace, GPU/CPU benchmark, adaptive resolution, driver face by calibrated position, background re-calibration. Coverage per failure mode: `docs/FAILURE_MODES.md`.
+- **Found and fixed in M2:**
+  - One Euro `beta = 0.007` (pixel-unit default) delayed blinks ~200 ms on 0–1 ratios → per-unit values (§8.5).
+  - The 1 s watchdog treated GPU shader warm-up as a stall and restarted the engine forever → 10 s grace for the first frame.
+  - The resolution drop fired during the GPU benchmark → only after the benchmark.
+- **Carried into M3:**
+  - Confirm the **pitch sign** on a real device (`pose.headDownSign`).
+  - `EYES_HIDDEN` (sunglasses) detection from real recordings (F3).
+  - Dark Cockpit polish: hide title and tabs while monitoring, full-screen (F14).
+  - Battery warning (F18); notification when the page is hidden (F10).
+  - Vietnamese UI and voice text.
 
 ## 18. Review of claims in the original brief
 

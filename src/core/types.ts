@@ -17,9 +17,15 @@ export interface FrameResult {
     faceAreaRatio: number;
     /** Frame-to-frame motion of stable points (nose bridge). */
     landmarkJitter: number;
+    /** Center of the face box, normalized 0–1. Absent when no face. */
+    faceCenter?: { x: number; y: number };
   };
-  /** L/R = the subject's left/right. blinkL/blinkR are MediaPipe blendshape scores, 0–1. */
-  eye?: { earL: number; earR: number; blinkL: number; blinkR: number };
+  /**
+   * L/R = the subject's left/right. blinkL/blinkR are MediaPipe blendshape scores, 0–1.
+   * widthL/widthR: eye corner-to-corner distance (fraction of image height). The eye
+   * nearer the camera looks wider when the head turns.
+   */
+  eye?: { earL: number; earR: number; blinkL: number; blinkR: number; widthL: number; widthR: number };
   mouth?: { mar: number; jawOpen: number };
   /** From the facial transformation matrix, in degrees. */
   pose?: { pitchDeg: number; yawDeg: number; rollDeg: number };
@@ -30,6 +36,17 @@ export interface FrameResult {
    * Never sent in normal monitoring.
    */
   debugPoints?: number[];
+}
+
+/** A frame after smoothing and quality gates — the input to calibration and detectors. */
+export interface ProcessedFrame {
+  raw: FrameResult;
+  /** Same frame with One Euro smoothing applied to the signals. */
+  smooth: FrameResult;
+  sensor: SensorState;
+  /** False when this frame should not feed detectors (blind, shaking). */
+  frameValid: boolean;
+  fps: number;
 }
 
 /** Can the system see the driver? (SPEC §8.6, §13.2) */
@@ -52,8 +69,8 @@ export const BLIND_SENSOR_STATES: ReadonlySet<SensorState> = new Set([
 export type FatigueLevel = 'NONE' | 'ADVISORY' | 'STRONG'
 
 /**
- * Per-frame input to the state machine. Detectors (M2) produce this from
- * FrameResult; tests produce it directly.
+ * Per-frame input to the state machine. The signal pipeline (core/detectors)
+ * produces this from ProcessedFrame; FSM tests produce it directly.
  * `null` means "unknown this frame" (for example the face is not visible).
  */
 export interface FrameSignals {

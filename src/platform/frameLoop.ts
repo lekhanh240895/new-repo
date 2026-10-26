@@ -69,7 +69,10 @@ export function startFrameLoop(opts: FrameLoopOptions): FrameLoop {
       lastSent = now
       grab()
         .then((image) => (running ? opts.onFrame(image, now) : image.close()))
-        .catch((err: unknown) => opts.onError(err instanceof Error ? err : new Error(String(err))))
+        .catch((err: unknown) => {
+          // After stop(), in-flight frames fail on purpose (engine disposed); not an error.
+          if (running) opts.onError(err instanceof Error ? err : new Error(String(err)))
+        })
         .finally(() => {
           busy = false
         })

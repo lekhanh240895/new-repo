@@ -2,19 +2,13 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { DEFAULT_CONFIG } from '../../core/config.ts'
 import { createQualityTracker } from '../../core/signals/quality.ts'
 import { createSignalSmoother } from '../../core/signals/smoothing.ts'
-import type { FrameResult, SensorState } from '../../core/types.ts'
+import type { ProcessedFrame } from '../../core/types.ts'
 import { CameraError, openCamera, type CameraHandle } from '../../platform/camera.ts'
 import { startFrameLoop, type FrameLoop } from '../../platform/frameLoop.ts'
 import { startVisionEngine, type Backend, type VisionEngine } from '../../vision/engine.ts'
 
 /** One processed frame, as shown in Debug mode. */
-export interface Sample {
-  raw: FrameResult;
-  smooth: FrameResult;
-  sensor: SensorState;
-  frameValid: boolean;
-  fps: number;
-}
+export type Sample = ProcessedFrame
 
 export type PipelineStatus = 'idle' | 'starting' | 'running' | 'error'
 

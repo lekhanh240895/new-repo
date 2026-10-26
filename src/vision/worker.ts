@@ -33,7 +33,7 @@ scope.onmessage = (e) => {
     case 'frame':
       try {
         if (analyzer === null) throw new Error('frame received before init finished')
-        const frame = analyzer.analyze(msg.image, msg.t, msg.debug)
+        const frame = analyzer.analyze(msg.image, msg.t, msg.debug, msg.prefer)
         scope.postMessage({ type: 'result', id: msg.id, frame })
       } catch (err) {
         scope.postMessage({ type: 'error', id: msg.id, message: errorMessage(err) })

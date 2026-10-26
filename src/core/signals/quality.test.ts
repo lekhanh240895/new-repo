@@ -47,6 +47,11 @@ describe('quality gates (SPEC §8.6)', () => {
     })
   })
 
+  it('glare / backlight (too bright) becomes LOW_VISIBILITY after 1 s (F1)', () => {
+    const q = createQualityTracker(cfg)
+    expect(feed(q, 0, 1200, (t) => frame(t, {}, { faceLuma: 240 })).sensor).toBe('LOW_VISIBILITY')
+  })
+
   it('no face in a dark frame is LOW_VISIBILITY (night), not just NO_FACE', () => {
     const q = createQualityTracker(cfg)
     expect(feed(q, 0, 1200, (t) => frame(t, { faceFound: false }, { faceLuma: 10 })).sensor).toBe('LOW_VISIBILITY')

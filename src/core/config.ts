@@ -25,7 +25,7 @@ export interface CalibrationConfig {
   maxAttempts: number;
   /** Fallback when no blink minimum was seen: EAR_closed = EAR_open × this. */
   closedFromOpenRatio: number;
-  /** Quantile used to track EAR_open online. */
+  /** Quantile of open-eye EAR used for EAR_open, at calibration and online (0.5 = median). */
   openQuantile: number;
   onlineWindowMs: number;
   maxDriftRatio: number;
@@ -117,6 +117,55 @@ export interface SpeedConfig {
   debugOffAboveKmh: number;
 }
 
+export interface PoseConfig {
+  /**
+   * `(pitch − baseline) × headDownSign > 0` means "head down".
+   * −1 assumes MediaPipe pitch goes negative when nodding down. Confirm on a
+   * real device in Debug mode (SPEC §17.1); flip to 1 if it is the other way.
+   */
+  headDownSign: 1 | -1;
+  /** Within this many degrees of baseline counts as "level" (nod start and end). */
+  levelDeg: number;
+}
+
+export interface MouthConfig {
+  /** Weight of the jawOpen blendshape vs normalized MAR in mouth openness. */
+  jawWeight: number;
+  /** MAR above baseline that counts as fully open. */
+  marSpan: number;
+  /** Mouth openness crossing this level counts as one open/close cycle (speech check). */
+  speechCrossLevel: number;
+}
+
+export interface SetupConfig {
+  /** The face must be seen with good quality this long to pass the setup check. */
+  okForMs: number;
+  /** Give up after this long and show what is wrong. */
+  timeoutMs: number;
+}
+
+export interface WatchdogConfig {
+  /** No processed frame for this long means the pipeline stalled (SPEC §12 F20). */
+  stallMs: number;
+  /** Limit for the first frame after an engine (re)start: GPU warm-up can take seconds. */
+  startupMs: number;
+  /** Restart attempts before staying in FAULT. */
+  maxRestarts: number;
+}
+
+export interface PerformanceConfig {
+  targetFps: number;
+  normalWidth: number;
+  /** Frame width used when the device is too slow (SPEC §12 F6). */
+  lowWidth: number;
+  lowFpsBelow: number;
+  lowForMs: number;
+  /** GPU slower than this per frame: try the CPU delegate and keep the faster one. */
+  gpuSlowMs: number;
+  /** Frames measured per delegate before deciding. */
+  tuneFrames: number;
+}
+
 export interface Config {
   quality: QualityConfig;
   calibration: CalibrationConfig;
@@ -127,12 +176,17 @@ export interface Config {
   degraded: DegradedConfig;
   alert: AlertConfig;
   speed: SpeedConfig;
+  pose: PoseConfig;
+  mouth: MouthConfig;
+  setup: SetupConfig;
+  watchdog: WatchdogConfig;
+  performance: PerformanceConfig;
 }
 
 const SECOND = 1000
 const MINUTE = 60 * SECOND
 
-export const DEFAULT_CONFIG: Readonly<Config> = Object.freeze({
+export const DEFAULT_CONFIG: Readonly<Config> = Object.freeze<Config>({
   quality: {
     badLightMs: 1 * SECOND,
     minFaceLuma: 40,
@@ -151,7 +205,7 @@ export const DEFAULT_CONFIG: Readonly<Config> = Object.freeze({
     minValidRatio: 0.7,
     maxAttempts: 3,
     closedFromOpenRatio: 0.35,
-    openQuantile: 0.9,
+    openQuantile: 0.5,
     onlineWindowMs: 5 * MINUTE,
     maxDriftRatio: 0.15,
     recalibratePoseShiftDeg: 15,
@@ -220,5 +274,32 @@ export const DEFAULT_CONFIG: Readonly<Config> = Object.freeze({
   speed: {
     armAboveKmh: 10,
     debugOffAboveKmh: 5,
+  },
+  pose: {
+    headDownSign: -1,
+    levelDeg: 5,
+  },
+  mouth: {
+    jawWeight: 0.5,
+    marSpan: 0.6,
+    speechCrossLevel: 0.35,
+  },
+  setup: {
+    okForMs: 1.5 * SECOND,
+    timeoutMs: 15 * SECOND,
+  },
+  watchdog: {
+    stallMs: 1 * SECOND,
+    startupMs: 10 * SECOND,
+    maxRestarts: 3,
+  },
+  performance: {
+    targetFps: 15,
+    normalWidth: 480,
+    lowWidth: 320,
+    lowFpsBelow: 10,
+    lowForMs: 5 * SECOND,
+    gpuSlowMs: 50,
+    tuneFrames: 30,
   },
 })

@@ -2,7 +2,7 @@
  * Applies the One Euro filter to the derived signals, not to the raw
  * landmarks (SPEC §8.5): cheaper, and blinks stay sharp.
  */
-import { createOneEuroFilter, DEFAULT_ONE_EURO, type OneEuroParams } from '../filters/oneEuro.ts'
+import { createOneEuroFilter, type OneEuroParams } from '../filters/oneEuro.ts'
 import type { FrameResult } from '../types.ts'
 
 const CHANNELS = [
@@ -21,15 +21,43 @@ const CHANNELS = [
 
 type Channel = (typeof CHANNELS)[number]
 
+export type ChannelGroup = 'ratio' | 'angle' | 'gaze'
+
+/**
+ * `beta` depends on the signal's units. The textbook 0.007 is for pixel
+ * coordinates; on 0–1 ratios it barely reacts to speed and delays a blink by
+ * ~200 ms. These values follow a 0.3 → 0.05 EAR drop within about one frame
+ * while still smoothing small jitter (tested in smoothing.test.ts).
+ */
+export const SMOOTHING: Readonly<Record<ChannelGroup, OneEuroParams>> = Object.freeze({
+  ratio: { minCutoff: 1.5, beta: 4, dCutoff: 1 },
+  angle: { minCutoff: 1, beta: 0.05, dCutoff: 1 },
+  gaze: { minCutoff: 1, beta: 1, dCutoff: 1 },
+})
+
+const GROUP: Record<Channel, ChannelGroup> = {
+  earL: 'ratio',
+  earR: 'ratio',
+  blinkL: 'ratio',
+  blinkR: 'ratio',
+  mar: 'ratio',
+  jawOpen: 'ratio',
+  pitchDeg: 'angle',
+  yawDeg: 'angle',
+  rollDeg: 'angle',
+  gazeX: 'gaze',
+  gazeY: 'gaze',
+}
+
 export interface SignalSmoother {
   /** Returns a copy of `frame` with smoothed signals. Resets when the face is lost. */
   smooth(frame: FrameResult): FrameResult;
   reset(): void;
 }
 
-export function createSignalSmoother(params: OneEuroParams = DEFAULT_ONE_EURO): SignalSmoother {
+export function createSignalSmoother(params: Readonly<Record<ChannelGroup, OneEuroParams>> = SMOOTHING): SignalSmoother {
   const filters = Object.fromEntries(
-    CHANNELS.map((c) => [c, createOneEuroFilter(params)]),
+    CHANNELS.map((c) => [c, createOneEuroFilter(params[GROUP[c]])]),
   ) as Record<Channel, ReturnType<typeof createOneEuroFilter>>
 
   const reset = () => {
@@ -48,6 +76,7 @@ export function createSignalSmoother(params: OneEuroParams = DEFAULT_ONE_EURO): 
         ...frame,
         ...(eye && {
           eye: {
+            ...eye,
             earL: f('earL', eye.earL, t),
             earR: f('earR', eye.earR, t),
             blinkL: f('blinkL', eye.blinkL, t),

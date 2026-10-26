@@ -4,7 +4,7 @@ import type { AnalyzerOptions, Delegate } from './analyzer.ts'
 
 export type ToWorker =
   | { type: 'init'; options: AnalyzerOptions }
-  | { type: 'frame'; id: number; t: number; debug: boolean; image: ImageBitmap }
+  | { type: 'frame'; id: number; t: number; debug: boolean; prefer: { x: number; y: number } | null; image: ImageBitmap }
   | { type: 'close' }
 
 export type FromWorker =

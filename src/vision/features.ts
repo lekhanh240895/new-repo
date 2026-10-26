@@ -122,6 +122,27 @@ export function faceBox(lm: readonly Point[]): Box {
   return { x: minX, y: minY, w: Math.max(0, maxX - minX), h: Math.max(0, maxY - minY) }
 }
 
+/**
+ * Which detected face is the driver (SPEC §12 F17). With a calibrated position,
+ * the face whose center is nearest to it; otherwise the largest (closest to the
+ * camera). Returns -1 when there are no faces.
+ */
+export function pickDriverIndex(boxes: readonly Box[], prefer: Point | null): number {
+  let best = -1
+  let bestScore = Infinity
+  for (const [i, b] of boxes.entries()) {
+    const score =
+      prefer === null
+        ? -(b.w * b.h)
+        : Math.hypot(b.x + b.w / 2 - prefer.x, b.y + b.h / 2 - prefer.y)
+    if (score < bestScore) {
+      best = i
+      bestScore = score
+    }
+  }
+  return best
+}
+
 /** Mean Rec. 601 luma (0–255) of RGBA pixels. */
 export function meanLuma(rgba: Uint8ClampedArray): number {
   const n = Math.floor(rgba.length / 4)

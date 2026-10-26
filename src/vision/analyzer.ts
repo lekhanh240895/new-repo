@@ -16,6 +16,7 @@ import {
   meanLuma,
   MIN_LANDMARKS,
   mouthAspectRatio,
+  pickDriverIndex,
   NOSE_BRIDGE,
   poseFromMatrix,
   RIGHT_EYE,
@@ -37,7 +38,8 @@ export interface AnalyzerOptions {
 
 export interface FaceAnalyzer {
   readonly delegate: Delegate;
-  analyze(image: ImageBitmap, t: number, debug: boolean): FrameResult;
+  /** `prefer`: calibrated face center, used to pick the driver when 2 faces are seen. */
+  analyze(image: ImageBitmap, t: number, debug: boolean, prefer?: Point | null): FrameResult;
   close(): void;
 }
 
@@ -48,22 +50,21 @@ async function createLandmarker(opts: AnalyzerOptions, delegate: Delegate): Prom
   return FaceLandmarker.createFromOptions(fileset, {
     baseOptions: { modelAssetPath: opts.modelUrl, delegate },
     runningMode: 'VIDEO',
-    // Two faces so a passenger does not replace the driver; we keep the largest (SPEC §12 F17).
+    // Two faces so a passenger does not replace the driver (SPEC §12 F17).
     numFaces: 2,
     outputFaceBlendshapes: true,
     outputFacialTransformationMatrixes: true,
   })
 }
 
-/** The largest face (closest to the camera), or null. */
-function pickDriver(result: FaceLandmarkerResult): { index: number; box: Box } | null {
-  let best: { index: number; box: Box } | null = null
-  for (const [index, lm] of result.faceLandmarks.entries()) {
-    if (lm.length < MIN_LANDMARKS) continue
-    const box = faceBox(lm)
-    if (best === null || box.w * box.h > best.box.w * best.box.h) best = { index, box }
-  }
-  return best
+/** The driver's face: nearest to the calibrated position, else the largest. */
+function pickDriver(result: FaceLandmarkerResult, prefer: Point | null): { index: number; box: Box } | null {
+  const usable = [...result.faceLandmarks.entries()].filter(([, lm]) => lm.length >= MIN_LANDMARKS)
+  const boxes = usable.map(([, lm]) => faceBox(lm))
+  const i = pickDriverIndex(boxes, prefer)
+  const entry = usable[i]
+  const box = boxes[i]
+  return entry === undefined || box === undefined ? null : { index: entry[0], box }
 }
 
 export async function createFaceAnalyzer(opts: AnalyzerOptions): Promise<FaceAnalyzer> {
@@ -94,7 +95,7 @@ export async function createFaceAnalyzer(opts: AnalyzerOptions): Promise<FaceAna
 
   return {
     delegate,
-    analyze(image, t, debug) {
+    analyze(image, t, debug, prefer = null) {
       // MediaPipe needs strictly increasing timestamps in VIDEO mode.
       const ts = Math.max(lastTs + 1, Math.round(t))
       lastTs = ts
@@ -103,7 +104,7 @@ export async function createFaceAnalyzer(opts: AnalyzerOptions): Promise<FaceAna
       const inferMs = performance.now() - start
       const aspect = image.width / image.height
 
-      const driver = pickDriver(result)
+      const driver = pickDriver(result, prefer)
       const lm = driver === null ? undefined : result.faceLandmarks[driver.index]
       if (driver === null || lm === undefined) {
         prevBridge = null
@@ -135,12 +136,15 @@ export async function createFaceAnalyzer(opts: AnalyzerOptions): Promise<FaceAna
           faceLuma: lumaOf(image, driver.box),
           faceAreaRatio: driver.box.w * driver.box.h,
           landmarkJitter,
+          faceCenter: { x: driver.box.x + driver.box.w / 2, y: driver.box.y + driver.box.h / 2 },
         },
         eye: {
           earL: eyeAspectRatio(lm, LEFT_EYE, aspect),
           earR: eyeAspectRatio(lm, RIGHT_EYE, aspect),
           blinkL: blendshapeScore(cats, 'eyeBlinkLeft') ?? 0,
           blinkR: blendshapeScore(cats, 'eyeBlinkRight') ?? 0,
+          widthL: distance(lm[LEFT_EYE.p1] ?? bridge, lm[LEFT_EYE.p4] ?? bridge, aspect),
+          widthR: distance(lm[RIGHT_EYE.p1] ?? bridge, lm[RIGHT_EYE.p4] ?? bridge, aspect),
         },
         mouth: { mar: mouthAspectRatio(lm, aspect), jawOpen: blendshapeScore(cats, 'jawOpen') ?? 0 },
         gaze: { x: (gL.x + gR.x) / 2, y: (gL.y + gR.y) / 2 },
