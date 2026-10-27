@@ -39,8 +39,11 @@ export interface FrameResult {
      */
     lookX?: number;
     lookY?: number;
+    /** eyeSquint blendshape, mean of both eyes, 0–1 (sun, laughing). */
+    squint?: number;
   };
-  mouth?: { mar: number; jawOpen: number };
+  /** smile: mouthSmile blendshape, mean of both sides, 0–1. */
+  mouth?: { mar: number; jawOpen: number; smile?: number };
   /** From the facial transformation matrix, in degrees. */
   pose?: { pitchDeg: number; yawDeg: number; rollDeg: number };
   /** Iris offset inside the eye box, −1..1. y < 0 = looking down. */
@@ -98,6 +101,10 @@ export interface FrameSignals {
   offRoad: boolean | null;
   /** Eyes clearly open and head pose within limits of baseline (SPEC §11 stop rule). */
   recovered: boolean;
+  /** Laugh, sneeze or yawn in progress (or just ended): microsleep waits a bit longer (T9). */
+  expression?: boolean;
+  /** Drowsy eyes that are not closed: heavy lids, a sinking stare, or repeated near-microsleeps. */
+  drowsyEyes?: 'heavy' | 'stare' | 'nearMiss';
   fatigue: FatigueLevel;
   /** False when the car is known to be stopped (SPEC §10.6). */
   armed: boolean;

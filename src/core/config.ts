@@ -47,6 +47,76 @@ export interface EyeConfig {
   closedGapMs: number;
   blinkMaxMs: number;
   slowBlinkMaxMs: number;
+  /**
+   * Looking down lowers the eyelids (T8). At full down gaze the "closed" line
+   * moves down by this much (0.3 → 0.2), so a speedometer or phone glance is
+   * not read as closed eyes. Kept small: real closed eyes read ~0–0.12, and
+   * closing the eyes can raise the eyeLookDown blendshape (seen on the replay clip).
+   */
+  downGazeCorrection: number;
+  /** Eye "up" value (iris + blendshape, < 0 = down) that counts as full down gaze. */
+  downGazeFull: number;
+  /**
+   * Shaky frames (bumpy road, F06) are not used for most signals, but eyes that
+   * are clearly closed (openness below this) still count.
+   */
+  shakyClosedBelow: number;
+}
+
+/**
+ * Expressions that close the eyes for a moment: laugh, sneeze, yawn (T9).
+ * While one is in progress (or just ended), a microsleep alarm waits `extraMs` longer.
+ */
+export interface ExpressionConfig {
+  /** Fused mouth opening (jaw + MAR, 0–1). */
+  mouthAbove: number;
+  /**
+   * mouthSmile blendshape: above smileAbove AND at least smileRise above the
+   * driver's resting smile (calibration). Some faces read 0.9 at rest.
+   * Not eyeSquint: closing the eyes raises it too (seen on the replay clip).
+   */
+  smileAbove: number;
+  smileRise: number;
+  extraMs: number;
+  /** The expression still counts this long after it ends (a sneeze closes the eyes a bit longer). */
+  holdMs: number;
+}
+
+/** Drowsy eyes that are not fully closed (D01, D02) and near-microsleeps (D09). */
+export interface DrowsyEyesConfig {
+  /** Heavy lids: openness below this (but not closed), looking ahead, for heavyMs → L1. */
+  heavyBelow: number;
+  heavyMs: number;
+  /**
+   * Only with the head near its calibrated pitch: a tilted head shortens the eye
+   * in the image and lowers EAR without any drowsiness (C09).
+   */
+  heavyMaxPitchDeg: number;
+  /** Stare: lids lower than usual, no blink, for stareMs, while the head is still sinking (≥ stareSinkDeg over the last stareSinkWindowMs) → L1. */
+  stareBelow: number;
+  stareMs: number;
+  stareSinkDeg: number;
+  stareSinkWindowMs: number;
+  /** Near-microsleep: a closure of at least nearMissMinMs (but < L1). nearMissCount in the window → L1. */
+  nearMissMinMs: number;
+  nearMissCount: number;
+  nearMissWindowMs: number;
+}
+
+/** Blinks getting longer during the trip: an early sign of fatigue (E10). */
+export interface BlinkTrendConfig {
+  /** The driver's normal blink length is learned in this first part of the trip. */
+  baselineMs: number;
+  minBaselineBlinks: number;
+  recentMs: number;
+  minRecentBlinks: number;
+  /**
+   * Advisory when recent mean blink length ≥ ratio × normal and ≥ minMs. At 15 fps a
+   * blink is measured in 67 ms steps, so 2.25 (not 2) keeps one step of noise from
+   * counting (150 → 250 ms reads as 133 → 267 ms).
+   */
+  ratio: number;
+  minMs: number;
 }
 
 export interface MicrosleepConfig {
@@ -58,6 +128,12 @@ export interface MicrosleepConfig {
    * keep counting the closure (worst case wins, SPEC §10.5).
    */
   carryClosureMinMs: number;
+  /**
+   * Face lost during a closure with no sign of a head drop (a hand rubbing the
+   * eyes, C07): the closure pauses this long, then counts again including the
+   * paused time. A fast head drop (T15) skips the pause.
+   */
+  blindGraceMs: number;
 }
 
 export interface FatigueConfig {
@@ -289,6 +365,9 @@ export interface Config {
   budgets: ZoneBudgetConfig;
   attention: AttentionConfig;
   faceLoss: FaceLossConfig;
+  expression: ExpressionConfig;
+  drowsyEyes: DrowsyEyesConfig;
+  blinkTrend: BlinkTrendConfig;
   speedContext: SpeedContextConfig;
   motion: MotionConfig;
   pose: PoseConfig;
@@ -334,6 +413,9 @@ export const DEFAULT_CONFIG: Readonly<Config> = Object.freeze<Config>({
     farEyeYawDeg: 25,
     blinkMinMs: 50,
     closedGapMs: 150,
+    downGazeCorrection: 0.1,
+    downGazeFull: 0.6,
+    shakyClosedBelow: 0.15,
     blinkMaxMs: 400,
     slowBlinkMaxMs: 1000,
   },
@@ -342,6 +424,7 @@ export const DEFAULT_CONFIG: Readonly<Config> = Object.freeze<Config>({
     l2Ms: 1.5 * SECOND,
     l3Ms: 2.0 * SECOND,
     carryClosureMinMs: 400,
+    blindGraceMs: 2 * SECOND,
   },
   fatigue: {
     perclosWindowMs: 60 * SECOND,
@@ -421,6 +504,33 @@ export const DEFAULT_CONFIG: Readonly<Config> = Object.freeze<Config>({
     capacityMs: 2 * SECOND,
     refillLatencyMs: 100,
     refillRate: 1,
+  },
+  expression: {
+    mouthAbove: 0.35,
+    smileAbove: 0.5,
+    smileRise: 0.3,
+    extraMs: 1 * SECOND,
+    holdMs: 1 * SECOND,
+  },
+  drowsyEyes: {
+    heavyBelow: 0.55,
+    heavyMs: 3 * SECOND,
+    heavyMaxPitchDeg: 7,
+    stareBelow: 0.7,
+    stareMs: 5 * SECOND,
+    stareSinkDeg: 2.5,
+    stareSinkWindowMs: 3 * SECOND,
+    nearMissMinMs: 700,
+    nearMissCount: 3,
+    nearMissWindowMs: 60 * SECOND,
+  },
+  blinkTrend: {
+    baselineMs: 5 * MINUTE,
+    minBaselineBlinks: 20,
+    recentMs: 2 * MINUTE,
+    minRecentBlinks: 15,
+    ratio: 2.25,
+    minMs: 250,
   },
   faceLoss: {
     lookbackMs: 300,

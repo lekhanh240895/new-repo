@@ -77,25 +77,32 @@ describe('yawn detector (SPEC §10.2, F11)', () => {
 })
 
 describe('nod detector (SPEC §10.2)', () => {
-  it('counts a quick drop that comes back', () => {
+  it('counts a quick drop that comes back, with drowsy eyes', () => {
     const n = createNodDetector(cfg.fatigue, cfg.pose)
-    feed(0, 1000, (t) => n.update(t, 0))
-    feed(1000, 1400, (t) => n.update(t, 20)) // dropped within 0.4 s
-    expect(feed(1400, 2000, (t) => n.update(t, 0))).toBe(1)
+    feed(0, 1000, (t) => n.update(t, 0, false))
+    feed(1000, 1400, (t) => n.update(t, 20, true)) // dropped within 0.4 s, eyes closing
+    expect(feed(1400, 2000, (t) => n.update(t, 0, false))).toBe(1)
+  })
+
+  it('ignores the same drop with alert eyes: bump, braking, music, phone glance (T11)', () => {
+    const n = createNodDetector(cfg.fatigue, cfg.pose)
+    feed(0, 1000, (t) => n.update(t, 0, false))
+    feed(1000, 1400, (t) => n.update(t, 20, false))
+    expect(feed(1400, 2000, (t) => n.update(t, 0, false))).toBe(0)
   })
 
   it('ignores a slow lean forward', () => {
     const n = createNodDetector(cfg.fatigue, cfg.pose)
-    feed(0, 1000, (t) => n.update(t, 0))
+    feed(0, 1000, (t) => n.update(t, 0, false))
     // 0 → 20° over 2 s.
-    feed(1000, 3000, (t) => n.update(t, ((t - 1000) / 2000) * 20))
-    expect(feed(3000, 4000, (t) => n.update(t, 0))).toBe(0)
+    feed(1000, 3000, (t) => n.update(t, ((t - 1000) / 2000) * 20, true))
+    expect(feed(3000, 4000, (t) => n.update(t, 0, false))).toBe(0)
   })
 
   it('does not count a drop that never comes back', () => {
     const n = createNodDetector(cfg.fatigue, cfg.pose)
-    feed(0, 1000, (t) => n.update(t, 0))
-    feed(1000, 5000, (t) => n.update(t, 25))
-    expect(feed(5000, 6000, (t) => n.update(t, 0))).toBe(0)
+    feed(0, 1000, (t) => n.update(t, 0, false))
+    feed(1000, 5000, (t) => n.update(t, 25, true))
+    expect(feed(5000, 6000, (t) => n.update(t, 0, false))).toBe(0)
   })
 })

@@ -277,8 +277,42 @@ What changed:
 To confirm on a real phone (P7): the 60°/s thresholds against real shoulder checks and real
 head drops.
 
-Still failing, by phase: P4 — B01, C01, C02, C04–C07, C15, D01, D02, D09, E05–E11, F06 ·
-P5 — B05, F01–F03.
+### P4 results (eye-closure robustness, drowsy eyes, clean fatigue signals)
+
+**90 pass, 4 fail, 8 need a real clip** (was 72 / 22 / 8). **18 improved (B01, C01, C02,
+C04–C07, C15, D01, D02, D09, E05–E08, E10, E11, F06), 0 regressed.**
+
+What changed:
+- **Looking down (T8):** when iris and blendshape both say "down", the "closed" line moves
+  from 0.3 to 0.2. Speedometer and lap-phone looks no longer read as closed eyes, so the phone
+  now gives a distraction alarm, not a microsleep alarm (B01, C01, C02, C15), and stops adding
+  to PERCLOS (E05).
+- **Expressions (T9):** mouth open (yawn, sneeze) or a smile 0.3 above the driver's resting
+  smile → 1 s more before L1. Holds 1 s after the expression ends (C04–C06). The extra time
+  is never more than 1 s, so sleeping with the mouth open still alarms by 2 s.
+- **Hand over the face (C07):** face lost mid-closure with no fast head drop → the count
+  pauses for 2 s. Still gone after that → the paused time counts (straight to L3).
+- **Drowsy eyes that are not closed:** heavy lids (openness < 0.55, head level, looking
+  ahead) for 3 s → L1 (D01). Lids low with no blink while the head keeps sinking → L1 (D02).
+  Three closures of 0.7–1.0 s within 60 s → L1 (D09). Heavy lids with a tilted head are not
+  trusted: the tilt shortens the eye in the image (C09 guard).
+- **Shaky road (F06):** shaky frames are still not used for fatigue statistics, but clearly
+  closed eyes (openness < 0.15) count for microsleep.
+- **Fatigue signals (T11):** a nod needs drowsy eyes during the drop, so bumps, braking,
+  music and phone glances no longer say "you are tired" (E06–E08, E11). New: blinks 2.25×
+  longer than the driver's normal (first 5 min) → advisory (E10).
+
+**Found on the real-model replay clip** (and fixed before commit): this test face reads
+smile 0.93 and squint 0.69 with the eyes open, and closing the eyes raises squint (0.87) and
+the eyeLookDown blendshape (0.51). A first version used fixed smile/squint levels, so every
+microsleep alarm came 1 s late. Now: smile is compared to the resting smile from calibration,
+squint is not used, and the down-gaze correction is small (0.1) and needs the iris to agree.
+
+To confirm with real clips (P7): smile/mouth levels while laughing, sneezing and yawning; how
+low the lids go on a real speedometer glance; heavy-lid and stare levels on a tired driver;
+what the iris does under closed lids.
+
+Still failing, by phase: P5 — B05, F01–F03.
 
 ## 5. Safety rules for every change
 

@@ -11,6 +11,8 @@ export interface Baseline {
   earClosed: number;
   /** MAR with the mouth at rest. */
   mar: number;
+  /** mouthSmile blendshape at rest: some faces "smile" all the time (T9 compares to this). */
+  smile: number;
   pitchDeg: number;
   yawDeg: number;
   rollDeg: number;
@@ -28,6 +30,7 @@ export const DEFAULT_BASELINE: Readonly<Baseline> = Object.freeze({
   earOpen: 0.28,
   earClosed: 0.1,
   mar: 0.05,
+  smile: 0,
   pitchDeg: 0,
   yawDeg: 0,
   rollDeg: 0,
@@ -115,6 +118,7 @@ export function computeBaseline(frames: readonly ProcessedFrame[], cfg: Calibrat
       earOpen,
       earClosed: clamp(earClosed, 0, earOpen * 0.8),
       mar: finiteOr(median(valid.map((f) => f.raw.mouth?.mar ?? Number.NaN)), DEFAULT_BASELINE.mar),
+      smile: finiteOr(median(valid.map((f) => f.raw.mouth?.smile ?? Number.NaN)), DEFAULT_BASELINE.smile),
       pitchDeg: median(valid.map((f) => f.smooth.pose.pitchDeg)),
       yawDeg: median(valid.map((f) => f.smooth.pose.yawDeg)),
       rollDeg: median(valid.map((f) => f.smooth.pose.rollDeg)),

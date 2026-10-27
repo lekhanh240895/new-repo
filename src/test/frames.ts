@@ -17,6 +17,10 @@ export interface FrameSpec {
   pitch?: number;
   yaw?: number;
   gazeY?: number;
+  /** Blendshapes: eye direction (y < 0 = down), squint, smile. */
+  lookY?: number;
+  squint?: number;
+  smile?: number;
   faceFound?: boolean;
   sensor?: SensorState;
   valid?: boolean;
@@ -48,8 +52,10 @@ export function processed(t: number, spec: FrameSpec = {}): ProcessedFrame {
           blinkR: blink,
           widthL: spec.widthL ?? 0.08,
           widthR: spec.widthR ?? 0.08,
+          ...(spec.lookY !== undefined && { lookY: spec.lookY }),
+          ...(spec.squint !== undefined && { squint: spec.squint }),
         },
-        mouth: { mar: spec.mar ?? 0.05, jawOpen: spec.jaw ?? 0.02 },
+        mouth: { mar: spec.mar ?? 0.05, jawOpen: spec.jaw ?? 0.02, ...(spec.smile !== undefined && { smile: spec.smile }) },
         pose: { pitchDeg: spec.pitch ?? 0, yawDeg: spec.yaw ?? 0, rollDeg: 0 },
         gaze: { x: 0, y: spec.gazeY ?? 0 },
       }

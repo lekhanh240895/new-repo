@@ -71,9 +71,20 @@ describe('microsleep (SPEC §10.1)', () => {
 })
 
 describe('fail-safe when the face is lost (SPEC §10.5)', () => {
-  it('keeps escalating when the driver slumps out of view mid-closure', () => {
-    const r = runTrace([OPEN, closed(600), { ms: 3000, with: { sensor: 'NO_FACE', eyesClosed: null, offRoad: null } }])
+  it('keeps escalating when the driver slumps out of view mid-closure (fast head drop seen, T15)', () => {
+    const slump = { sensor: 'NO_FACE' as const, eyesClosed: null, offRoad: null, assumeClosed: true }
+    const r = runTrace([OPEN, closed(600), { ms: 3000, with: slump }])
     expect(effectNames(r.effects)).toEqual(['alarm:L1', 'alarm:L2', 'alarm:L3'])
+    near(firstTimeOf(r, 'alarm:L1'), 2000 + 1000)
+  })
+
+  it('face lost mid-closure with no head drop: pauses 2 s (hand rubbing the eyes, C07)', () => {
+    const lost = (ms: number) => ({ ms, with: { sensor: 'NO_FACE' as const, eyesClosed: null, offRoad: null } })
+    expect(effectNames(runTrace([OPEN, closed(600), lost(1500), ahead(3000)]).effects)).toEqual([])
+    // Still gone after the pause: the paused time counts, so it jumps straight to L3.
+    const r = runTrace([OPEN, closed(600), lost(3000)])
+    expect(effectNames(r.effects)).toEqual(['alarm:L3'])
+    near(firstTimeOf(r, 'alarm:L3'), 2000 + 600 + 2000)
   })
 
   it('keeps an active alarm running when the face is lost', () => {
@@ -269,5 +280,25 @@ describe('P3: attention buffer (T4, AttenD)', () => {
   it('a glance leaves the buffer partly drained', () => {
     const r = runTrace([OPEN, away(1500)])
     expect(r.state.monitoring.buffer).toBeLessThan(DEFAULT_CONFIG.attention.capacityMs)
+  })
+})
+
+describe('P4: expressions and drowsy eyes', () => {
+  it('an expression gives 1 s more before L1 (T9)', () => {
+    const laughing = { ms: 2500, with: { eyesClosed: true, expression: true } }
+    const r = runTrace([OPEN, laughing])
+    near(firstTimeOf(r, 'alarm:L1'), 2000 + 2000)
+  })
+
+  it('drowsy eyes raise L1 only, and block recovery while they last', () => {
+    const r = runTrace([OPEN, { ms: 4000, with: { drowsyEyes: 'heavy' as const } }])
+    expect(effectNames(r.effects)).toEqual(['alarm:L1'])
+    const after = runTrace([OPEN, { ms: 500, with: { drowsyEyes: 'heavy' as const } }, ahead(2500)])
+    expect(effectNames(after.effects)).toEqual(['alarm:L1', 'alarmStop'])
+  })
+
+  it('drowsy eyes do not alarm while stopped', () => {
+    const r = runTrace([OPEN, { ms: 4000, with: { drowsyEyes: 'heavy' as const, armedL: false } }])
+    expect(effectNames(r.effects)).toEqual([])
   })
 })

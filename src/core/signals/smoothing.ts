@@ -89,7 +89,7 @@ export function createSignalSmoother(params: Readonly<Record<ChannelGroup, OneEu
             ...(eye.lookY !== undefined && { lookY: f('lookY', eye.lookY, t) }),
           },
         }),
-        ...(mouth && { mouth: { mar: f('mar', mouth.mar, t), jawOpen: f('jawOpen', mouth.jawOpen, t) } }),
+        ...(mouth && { mouth: { ...mouth, mar: f('mar', mouth.mar, t), jawOpen: f('jawOpen', mouth.jawOpen, t) } }),
         ...(pose && {
           pose: {
             pitchDeg: f('pitchDeg', pose.pitchDeg, t),

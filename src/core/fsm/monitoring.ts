@@ -160,14 +160,31 @@ export function stepMonitoring(
   } else {
     closedSince = null
   }
-  const closureMs = closedNow && closedSince !== null ? t - closedSince : 0
+  let closureMs = closedNow && closedSince !== null ? t - closedSince : 0
+  // Face lost mid-closure with no sign of a head drop (a hand rubbing the eyes, C07):
+  // pause the count for a while. If the face stays away, count the paused time too.
+  const blindStart = blind ? (m.blindSince ?? t) : null
+  if (
+    rawClosed === null &&
+    blindStart !== null &&
+    closedSince !== null &&
+    !isMicrosleep(m.latched) &&
+    t - blindStart < cfg.microsleep.blindGraceMs
+  ) {
+    closureMs = Math.min(closureMs, Math.max(0, blindStart - closedSince))
+  }
 
+  // A laugh, sneeze or yawn closes the eyes for a moment: wait a bit longer (T9).
+  const extra = s.expression === true ? cfg.expression.extraMs : 0
   let micro: AlarmLevel | null = null
-  if (closureMs >= cfg.microsleep.l3Ms - shift) micro = 'L3'
-  else if (closureMs >= cfg.microsleep.l2Ms - shift) micro = 'L2'
-  else if (closureMs >= cfg.microsleep.l1Ms - shift) micro = 'L1'
+  if (closureMs >= cfg.microsleep.l3Ms - shift + extra) micro = 'L3'
+  else if (closureMs >= cfg.microsleep.l2Ms - shift + extra) micro = 'L2'
+  else if (closureMs >= cfg.microsleep.l1Ms - shift + extra) micro = 'L1'
   // Head drop alone is less certain than closed eyes: cap at L2.
   if (degraded && micro === 'L3') micro = 'L2'
+  // Drowsy eyes that are not closed (heavy lids, sinking stare, repeated near-microsleeps): L1.
+  const drowsy = armedL && !blind && s.drowsyEyes !== undefined
+  if (drowsy && micro === null) micro = 'L1'
 
   // --- Eyes off road ---
   // Face lost right after a fast turn to the side counts as off road (T15).
@@ -229,7 +246,7 @@ export function stepMonitoring(
   let postAlarmAdvisoryUntil = m.postAlarmAdvisoryUntil
   let lastAdvisorySpokenAt = m.lastAdvisorySpokenAt
   if (latched !== null) {
-    const ok = s.recovered && !blind && !closedNow && !offNow
+    const ok = s.recovered && !blind && !closedNow && !offNow && !drowsy
     recoveredSince = ok ? (m.recoveredSince ?? t) : null
     if (recoveredSince !== null && t - recoveredSince >= cfg.alert.recoveryMs) {
       const after = afterAlarmCleared(m, latched, t, cfg)

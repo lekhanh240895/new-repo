@@ -78,8 +78,9 @@ export function frameFor(t: number, look: Look = {}, cfg: Config = DEFAULT_CONFI
       widthR: look.widthR ?? 0.08,
       lookX: gazeX * cfg.pose.gazeXRightSign,
       lookY,
+      squint: look.future?.eyeSquint ?? 0,
     },
-    mouth: { mar: look.mar ?? 0.05, jawOpen: look.jaw ?? 0.02 },
+    mouth: { mar: look.mar ?? 0.05, jawOpen: look.jaw ?? 0.02, smile: look.future?.smile ?? 0 },
     pose: {
       pitchDeg: -(look.pitch ?? 0) * cfg.pose.headDownSign,
       yawDeg: (look.yaw ?? 0) * cfg.pose.yawRightSign,

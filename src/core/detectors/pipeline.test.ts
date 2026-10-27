@@ -194,3 +194,106 @@ describe('face lost: why? (T15)', () => {
     expect(s.assumeClosed).toBeUndefined()
   })
 })
+
+describe('P4: robust eye closure (T8, T9)', () => {
+  // Lids drop when looking down: openness ≈ 0.28, under the normal 0.3 "closed" line.
+  const lowLidsDown = { ear: 0.1, blink: 0.55, gazeY: -0.8, lookY: -0.85 }
+
+  it('looking down with low lids is not "closed" (C01, B01)', () => {
+    const p = createSignalPipeline(cfg, BASE)
+    const s = p.update(processed(0, lowLidsDown), ctx)
+    expect(s.signals.eyesClosed).toBe(false)
+    expect(s.debug.closedLine).toBeCloseTo(cfg.eye.closedBelow - cfg.eye.downGazeCorrection)
+  })
+
+  it('the same lids looking ahead are closed; really closed eyes looking down are too', () => {
+    const p = createSignalPipeline(cfg, BASE)
+    expect(p.update(processed(0, { ear: 0.1, blink: 0.55 }), ctx).signals.eyesClosed).toBe(true)
+    expect(p.update(processed(66, { ...closed, gazeY: -0.8, lookY: -0.85 }), ctx).signals.eyesClosed).toBe(true)
+  })
+
+  it('iris and blendshape must agree on "down" (one noisy opinion is not enough)', () => {
+    const p = createSignalPipeline(cfg, BASE)
+    expect(p.update(processed(0, { ear: 0.1, blink: 0.55, gazeY: -0.8, lookY: 0.2 }), ctx).signals.eyesClosed).toBe(true)
+  })
+
+  it('a laugh, sneeze or yawn marks an expression, and it holds for 1 s', () => {
+    const p = createSignalPipeline(cfg, BASE)
+    expect(p.update(processed(0, { smile: 0.9 }), ctx).signals.expression).toBe(true)
+    expect(p.update(processed(900), ctx).signals.expression).toBe(true)
+    expect(p.update(processed(1100), ctx).signals.expression).toBeUndefined()
+    expect(p.update(processed(1200, { jaw: 0.8, mar: 0.6 }), ctx).signals.expression).toBe(true)
+  })
+
+  it('a face that smiles at rest is not an expression; closed eyes alarm on time (replay clip)', () => {
+    const smiler = { ...BASE, smile: 0.93 }
+    const p = createSignalPipeline(cfg, smiler)
+    expect(p.update(processed(0, { smile: 0.93 }), ctx).signals.expression).toBeUndefined()
+    const r = drive([{ ms: 2000, spec: { smile: 0.93 } }, { ms: 2200, spec: { ...closed, smile: 0.94, squint: 0.87 } }], smiler)
+    expect(r.effects).toEqual(['alarm:L1', 'alarm:L2', 'alarm:L3'])
+  })
+
+  it('laughing with squeezed eyes for 1.6 s: no microsleep alarm (C04)', () => {
+    expect(drive([{ ms: 2000 }, { ms: 1600, spec: { ...closed, smile: 0.9, squint: 0.8 } }, { ms: 3000 }]).effects).toEqual([])
+  })
+
+  it('…but eyes still closed 2 s into the laugh do alarm', () => {
+    expect(drive([{ ms: 2000 }, { ms: 2300, spec: { ...closed, smile: 0.9 } }]).effects[0]).toBe('alarm:L1')
+  })
+
+  it('shaky frames: clearly closed eyes still count (F06)', () => {
+    const p = createSignalPipeline(cfg, BASE)
+    expect(p.update(processed(0, { ...closed, valid: false }), ctx).signals.eyesClosed).toBe(true)
+    // Not clearly closed: unknown, as before.
+    expect(p.update(processed(66, { ear: 0.1, blink: 0.55, valid: false }), ctx).signals.eyesClosed).toBeNull()
+  })
+})
+
+describe('P4: drowsy eyes that are not closed', () => {
+  const heavyLids = { ear: 0.17, blink: 0.5 }
+
+  it('heavy lids looking ahead for 3 s → drowsy (D01)', () => {
+    const p = createSignalPipeline(cfg, BASE)
+    let last = undefined as ReturnType<typeof p.update> | undefined
+    for (const f of framesFrom([{ ms: 1000 }, { ms: 3200, spec: heavyLids }])) last = p.update(f, ctx)
+    expect(last?.signals.drowsyEyes).toBe('heavy')
+    expect(drive([{ ms: 1000 }, { ms: 4000, spec: heavyLids }]).effects[0]).toBe('alarm:L1')
+  })
+
+  it('heavy lids with the head tilted down are not trusted (C09)', () => {
+    expect(drive([{ ms: 1000 }, { ms: 6000, spec: { ...heavyLids, pitch: -10 } }]).effects).toEqual([])
+  })
+
+  it('heavy lids while looking down (phone, speedometer) are not drowsy', () => {
+    expect(drive([{ ms: 1000 }, { ms: 6000, spec: { ...heavyLids, gazeY: -0.8, lookY: -0.8 } }]).effects).not.toContain('alarm:L1')
+  })
+
+  it('three near-microsleeps (0.85 s) within a minute → L1 (D09)', () => {
+    const near = [{ ms: 850, spec: closed }, { ms: 10_000 }]
+    const r = drive([{ ms: 1000 }, ...near, ...near, { ms: 850, spec: closed }, { ms: 1000 }])
+    expect(r.effects[0]).toBe('alarm:L1')
+  })
+
+  it('two near-microsleeps are not enough', () => {
+    const near = [{ ms: 850, spec: closed }, { ms: 10_000 }]
+    expect(drive([{ ms: 1000 }, ...near, ...near]).effects).toEqual([])
+  })
+})
+
+describe('P4: fatigue nods need drowsy eyes (T11)', () => {
+  const nodTo = (pitch: number, eyes = {}) => [{ ms: 330, spec: { pitch, ...eyes } }, { ms: 2000 }]
+
+  it('head drops and comes back with open eyes (bump, phone glance): no fatigue', () => {
+    const p = createSignalPipeline(cfg, BASE)
+    let fatigue = 'NONE'
+    for (const f of framesFrom([{ ms: 1000 }, ...nodTo(-20)])) fatigue = p.update(f, ctx).signals.fatigue
+    expect(fatigue).toBe('NONE')
+  })
+
+  it('the same drop with closed eyes is a fatigue nod', () => {
+    const p = createSignalPipeline(cfg, BASE)
+    let fatigue = 'NONE'
+    for (const f of framesFrom([{ ms: 1000 }, ...nodTo(-20, closed)])) fatigue = p.update(f, ctx).signals.fatigue
+    expect(fatigue).toBe('ADVISORY')
+  })
+})

@@ -82,6 +82,13 @@ function blendshapeGaze(cats: readonly { categoryName: string; score: number }[]
   return { lookX: towardLeft - towardRight, lookY: ((upL ?? 0) + (upR ?? 0)) / 2 - ((downL ?? 0) + (downR ?? 0)) / 2 }
 }
 
+/** `{ [key]: mean of two blendshapes }`, or `{}` if either is missing. */
+function meanOf<K extends string>(cats: readonly { categoryName: string; score: number }[], key: K, a: string, b: string): Partial<Record<K, number>> {
+  const x = blendshapeScore(cats, a)
+  const y = blendshapeScore(cats, b)
+  return x === null || y === null ? {} : ({ [key]: (x + y) / 2 } as Partial<Record<K, number>>)
+}
+
 export async function createFaceAnalyzer(opts: AnalyzerOptions): Promise<FaceAnalyzer> {
   let landmarker: FaceLandmarker
   let delegate: Delegate = opts.preferGpu ? 'GPU' : 'CPU'
@@ -161,8 +168,13 @@ export async function createFaceAnalyzer(opts: AnalyzerOptions): Promise<FaceAna
           widthL: distance(lm[LEFT_EYE.p1] ?? bridge, lm[LEFT_EYE.p4] ?? bridge, aspect),
           widthR: distance(lm[RIGHT_EYE.p1] ?? bridge, lm[RIGHT_EYE.p4] ?? bridge, aspect),
           ...blendshapeGaze(cats),
+          ...meanOf(cats, 'squint', 'eyeSquintLeft', 'eyeSquintRight'),
         },
-        mouth: { mar: mouthAspectRatio(lm, aspect), jawOpen: blendshapeScore(cats, 'jawOpen') ?? 0 },
+        mouth: {
+          mar: mouthAspectRatio(lm, aspect),
+          jawOpen: blendshapeScore(cats, 'jawOpen') ?? 0,
+          ...meanOf(cats, 'smile', 'mouthSmileLeft', 'mouthSmileRight'),
+        },
         gaze: { x: (gL.x + gR.x) / 2, y: (gL.y + gR.y) / 2 },
         ...(pose !== null && { pose }),
       }

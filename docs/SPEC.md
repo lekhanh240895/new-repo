@@ -253,6 +253,13 @@ All numbers live in `core/config.ts`. They are **starting defaults** to tune wit
 
 ### 10.1 Eye closure and microsleep
 
+> **Updated in P4** (docs/ALERT_ACCURACY_PLAN.md): looking down (iris and blendshape agree)
+> lowers the "closed" line from 0.3 to 0.2. A laugh, sneeze or yawn (mouth open, or smile
+> 0.3 above the driver's resting smile) gives 1 s more before L1. Heavy lids (openness < 0.55,
+> head level, looking ahead) for 3 s, a sinking stare, or 3 closures of 0.7–1.0 s within 60 s
+> raise L1. Face lost mid-closure with no head drop pauses the count for 2 s. On a shaky frame,
+> clearly closed eyes (openness < 0.15) still count.
+
 | Event | Rule |
 | --- | --- |
 | Blink | Closed for 50–400 ms. Counted for stats only. |
@@ -262,6 +269,10 @@ All numbers live in `core/config.ts`. They are **starting defaults** to tune wit
 | Microsleep L3 | Closed continuously ≥ **2.0 s** |
 
 ### 10.2 Fatigue (slow build-up)
+
+> **Updated in P4:** a nod counts only with drowsy eyes during the drop (closed, or heavy lids
+> while not looking down). New advisory: blinks 2.25× longer than the driver's own normal
+> (learned in the first 5 minutes), over the last 2 minutes.
 
 | Signal | Window | Advisory | Strong advisory |
 | --- | --- | --- | --- |

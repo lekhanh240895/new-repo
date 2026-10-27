@@ -6,7 +6,8 @@ import { createOnlineEarTracker, type EarRange } from '../calibration/onlineEar.
 import type { Baseline } from '../calibration/baseline.ts'
 import type { Config } from '../config.ts'
 import { clamp } from '../stats.ts'
-import type { FatigueLevel, FrameSignals, GazeZone, ProcessedFrame, SpeedClass } from '../types.ts'
+import { BLIND_SENSOR_STATES, type FatigueLevel, type FrameSignals, type GazeZone, type ProcessedFrame, type SpeedClass } from '../types.ts'
+import { createBlinkTrend } from './blinkTrend.ts'
 import { createNodDetector } from './nod.ts'
 import { createEventCounter, createPerclos } from './windows.ts'
 import { createYawnDetector } from './yawn.ts'
@@ -16,6 +17,14 @@ import { classifyZone, combinedGaze, createZoneTracker, eyeConsensus, speedClass
 export interface SignalDebug {
   /** Fused eye openness, 0 = closed, 1 = calibrated open. */
   openness: number | null;
+  /** Openness below this counts as closed this frame (lower when looking down, T8). */
+  closedLine: number;
+  /** How far the eyes look down, 0–1 (iris and blendshape agree). */
+  downGaze: number;
+  expression: boolean;
+  drowsyEyes: FrameSignals['drowsyEyes'] | null;
+  /** Learned normal blink length (ms), null while learning. */
+  blinkNormalMs: number | null;
   mouth: number | null;
   /** Head below baseline in degrees (positive = down). */
   downDeg: number | null;
@@ -74,6 +83,11 @@ export function createSignalPipeline(cfg: Config, baseline: Baseline): SignalPip
   const nod = createNodDetector(cfg.fatigue, cfg.pose)
   let closedSince: number | null = null
   let shiftedSince: number | null = null
+  const blinkTrend = createBlinkTrend(cfg.blinkTrend)
+  let nearMisses: number[] = []
+  let lastExpressionT: number | null = null
+  let heavySince: number | null = null
+  let stare: { since: number; trail: { t: number; down: number }[] } | null = null
   const zones = createZoneTracker(cfg.zones.dwellMs)
   let lastPolicy: ZonePolicy = { offRoad: false, turningInto: false, d1Ms: cfg.offRoad.d1Ms, d2Ms: cfg.offRoad.d2Ms, countsTowardShare: false }
   let turningIntoSince: number | null = null
@@ -107,7 +121,9 @@ export function createSignalPipeline(cfg: Config, baseline: Baseline): SignalPip
     if ((p !== null && p > f.perclosStrong) || sb >= f.slowBlinksStrong || y >= f.yawnsStrong || n >= f.nodsStrong) {
       return 'STRONG'
     }
-    if ((p !== null && p > f.perclosAdvisory) || sb >= f.slowBlinksAdvisory || y >= f.yawnsAdvisory || n >= f.nodsAdvisory) {
+    // Blinks much longer than this driver's normal: an early sign (E10).
+    const trend = blinkTrend.tired(t)
+    if ((p !== null && p > f.perclosAdvisory) || sb >= f.slowBlinksAdvisory || y >= f.yawnsAdvisory || n >= f.nodsAdvisory || trend) {
       return 'ADVISORY'
     }
     return 'NONE'
@@ -140,10 +156,30 @@ export function createSignalPipeline(cfg: Config, baseline: Baseline): SignalPip
       }
       const lossKind = seen ? null : (faceLoss ?? null)
 
+      // --- Eye direction: how far the eyes look down (iris and blendshape must agree) ---
+      const eyeUp = usable ? eyeConsensus((smooth.gaze?.y ?? 0) - baseline.gazeY, smooth.eye?.lookY) : 0
+      const downGaze = clamp(-eyeUp / cfg.eye.downGazeFull, 0, 1)
+
+      // --- Mouth and expressions (T9) ---
+      let mouth: number | null = null
+      if (usable && smooth.mouth) {
+        const marNorm = clamp((smooth.mouth.mar - baseline.mar) / cfg.mouth.marSpan, 0, 1)
+        mouth = cfg.mouth.jawWeight * clamp(smooth.mouth.jawOpen, 0, 1) + (1 - cfg.mouth.jawWeight) * marNorm
+      }
+      const ex = cfg.expression
+      const expressing =
+        usable &&
+        ((mouth ?? 0) >= ex.mouthAbove || (smooth.mouth?.smile ?? 0) >= Math.max(ex.smileAbove, baseline.smile + ex.smileRise))
+      if (expressing) lastExpressionT = t
+      const expression = lastExpressionT !== null && t - lastExpressionT <= ex.holdMs
+      if (yawn.update(t, mouth)) yawns.add(t)
+
       // --- Eyes ---
       const range = ear.current()
+      // A shaky frame (bumpy road) is not used for most signals, but clearly closed eyes still count (F06).
+      const shaky = seen && !frame.frameValid && !BLIND_SENSOR_STATES.has(sensor) && smooth.eye !== undefined
       let openness: number | null = null
-      if (usable && smooth.eye) {
+      if ((usable || shaky) && smooth.eye) {
         const e = smooth.eye
         const left = eyeOpenness(e.earL, e.blinkL, range, cfg.eye.earWeight)
         const right = eyeOpenness(e.earR, e.blinkR, range, cfg.eye.earWeight)
@@ -153,27 +189,41 @@ export function createSignalPipeline(cfg: Config, baseline: Baseline): SignalPip
             ? e.widthL >= e.widthR ? left : right
             : (left + right) / 2
       }
-      const eyesClosed = openness === null ? null : openness < cfg.eye.closedBelow
+      // Looking down lowers the lids: move the "closed" line down (T8).
+      const closedLine = cfg.eye.closedBelow - cfg.eye.downGazeCorrection * downGaze
+      let eyesClosed: boolean | null = null
+      if (openness !== null) {
+        if (usable) eyesClosed = openness < closedLine
+        else if (openness < cfg.eye.shakyClosedBelow) eyesClosed = true
+      }
+      // Fatigue statistics only use clean frames.
+      const cleanClosed = usable ? eyesClosed : null
 
-      // Blink length → slow blinks (fatigue). Closures ≥ 1 s are microsleep, handled by the FSM.
-      if (eyesClosed === true) closedSince ??= t
-      else if (eyesClosed === false && closedSince !== null) {
+      // Blink length → slow blinks, blink trend, near-microsleeps. Closures ≥ 1 s are microsleep (FSM).
+      let nearMissCluster = false
+      if (cleanClosed === true) closedSince ??= t
+      else if (cleanClosed === false && closedSince !== null) {
         const ms = t - closedSince
         if (ms >= cfg.eye.blinkMaxMs && ms < cfg.eye.slowBlinkMaxMs) slowBlinks.add(t)
+        if (ms >= cfg.eye.blinkMinMs && ms < cfg.eye.slowBlinkMaxMs) blinkTrend.add(t, ms)
+        if (ms >= cfg.drowsyEyes.nearMissMinMs && ms < cfg.microsleep.l1Ms) {
+          nearMisses = [...nearMisses.filter((x) => x > t - cfg.drowsyEyes.nearMissWindowMs), t]
+          if (nearMisses.length >= cfg.drowsyEyes.nearMissCount) {
+            nearMissCluster = true
+            // One alarm per cluster: start counting again.
+            nearMisses = []
+          }
+        }
         closedSince = null
-      } else if (eyesClosed === null) closedSince = null
+      } else if (cleanClosed === null) closedSince = null
 
-      perclos.add(t, eyesClosed)
+      perclos.add(t, cleanClosed)
       const p = perclos.value(t)
 
-      // --- Mouth ---
-      let mouth: number | null = null
-      if (usable && smooth.mouth) {
-        const marNorm = clamp((smooth.mouth.mar - baseline.mar) / cfg.mouth.marSpan, 0, 1)
-        mouth = cfg.mouth.jawWeight * clamp(smooth.mouth.jawOpen, 0, 1) + (1 - cfg.mouth.jawWeight) * marNorm
-      }
-      if (yawn.update(t, mouth)) yawns.add(t)
-      if (nod.update(t, usable ? downDeg : null)) nods.add(t)
+      // Fatigue nod: the head drops and comes back, with drowsy eyes (T11). Lids low while
+      // looking down at something (phone) are not drowsy.
+      const drowsyLook = usable && openness !== null && (eyesClosed === true || (openness < cfg.drowsyEyes.heavyBelow && downGaze < 0.25))
+      if (nod.update(t, usable ? downDeg : null, drowsyLook)) nods.add(t)
 
       // --- Where the driver looks: combined head + eyes → zone (T3), debounced (T6) ---
       let gazeYaw = 0
@@ -182,7 +232,6 @@ export function createSignalPipeline(cfg: Config, baseline: Baseline): SignalPip
         const xSign = cfg.pose.gazeXRightSign
         const lookX = smooth.eye?.lookX
         const eyeRight = eyeConsensus((smooth.gaze?.x ?? 0) * xSign, lookX === undefined ? undefined : lookX * xSign)
-        const eyeUp = eyeConsensus((smooth.gaze?.y ?? 0) - baseline.gazeY, smooth.eye?.lookY)
         const g = combinedGaze(yawDeg, downDeg, eyeRight, eyeUp, cfg.zones)
         gazeYaw = g.yaw
         rawZone = classifyZone(g.yaw, g.pitch, zones.current(), cfg.zones)
@@ -214,6 +263,26 @@ export function createSignalPipeline(cfg: Config, baseline: Baseline): SignalPip
 
       // Degraded mode (eyes hidden) still needs this, so it does not require eye data — only a valid frame.
       const headDropped = downDeg === null || !frame.frameValid ? null : downDeg >= cfg.degraded.headDropDeg
+
+      // --- Drowsy eyes that are not closed (D01, D02): only when looking ahead, not down, no expression ---
+      const dz = cfg.drowsyEyes
+      const ahead = usable && (zone === 'road' || zone === 'up') && downGaze < 0.25 && !expression
+      const lowLids = ahead && openness !== null && eyesClosed === false
+      const level = downDeg !== null && Math.abs(downDeg) <= dz.heavyMaxPitchDeg
+      heavySince = lowLids && level && (openness ?? 1) < dz.heavyBelow ? (heavySince ?? t) : null
+      const heavy = heavySince !== null && t - heavySince >= dz.heavyMs
+      // Stare: lids lower than usual with no blink while the head keeps slowly sinking.
+      let staring = false
+      if (lowLids && (openness ?? 1) < dz.stareBelow && downDeg !== null) {
+        stare ??= { since: t, trail: [] }
+        stare.trail = [...stare.trail.filter((h) => h.t >= t - dz.stareSinkWindowMs), { t, down: downDeg }]
+        const oldest = stare.trail[0]
+        const windowFull = oldest !== undefined && t - stare.since >= dz.stareSinkWindowMs
+        staring = windowFull && t - stare.since >= dz.stareMs && downDeg - oldest.down >= dz.stareSinkDeg
+      } else {
+        stare = null
+      }
+      const drowsyEyes: FrameSignals['drowsyEyes'] | null = nearMissCluster ? 'nearMiss' : heavy ? 'heavy' : staring ? 'stare' : null
 
       // Recovered: eyes clearly open and looking at the road (head and eyes combined).
       const recovered = usable && openness !== null && openness > cfg.eye.openAbove && (zone === 'road' || zone === 'up')
@@ -248,12 +317,19 @@ export function createSignalPipeline(cfg: Config, baseline: Baseline): SignalPip
           ...(zone !== null && { zone }),
           ...(assumedZone !== null && { zone: assumedZone, assumeOffRoad: true }),
           ...(lossKind === 'drop' && { assumeClosed: true }),
+          ...(expression && { expression }),
+          ...(drowsyEyes !== null && { drowsyEyes }),
           offRoadD1Ms: lastPolicy.d1Ms,
           offRoadD2Ms: lastPolicy.d2Ms,
           countsTowardShare: lastPolicy.countsTowardShare,
         },
         debug: {
           openness,
+          closedLine,
+          downGaze,
+          expression,
+          drowsyEyes,
+          blinkNormalMs: blinkTrend.normalMs(),
           mouth,
           downDeg,
           yawDeg,
