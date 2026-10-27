@@ -366,6 +366,30 @@ mirror, rear-view and slow-side budgets, the lap / speedometer budgets and L1. T
 first to check with real clips (P7). A wide safe range does not prove a value is right; it
 only means no scripted case is near it.
 
+### P7 status (real clips) — kit ready, waiting for recordings
+
+P7 needs clips of a real face, recorded by you (parked or at a desk, never while driving).
+Built so far:
+- **`npm run clips`:** converts each clip with ffmpeg, plays it as the camera in Chromium
+  through the real MediaPipe model, calibrates on its first 10 s like a trip, then judges it
+  with the **same code as the scenarios** (shared `playFrames` / `evaluateAll`). Writes
+  `clips/CLIP_REPORT.md`.
+- **Clip manifest** (`clips/manifest.json`, example in `docs/clips.manifest.example.json`):
+  marks in seconds from the video start, speed changes (simulated), and the same expectation
+  kinds as the scenarios, plus `speaks` (e.g. "eyes hidden" for sunglasses).
+- **Sign check:** one 25 s clip (head right, head down, eyes right, eyes down) tells whether
+  `pose.headDownSign`, `pose.yawRightSign`, `pose.gazeXRightSign` are right for the phone, and
+  whether the blendshape eye direction agrees with the iris. This replaces three of the four
+  "confirm on a real phone" items; the gyroscope sign still needs a real right turn.
+- **Timing:** the fake camera starts the video when the camera is requested; measured on the
+  test portrait clip, blinks land within 0.02 s of their place in the video.
+- **Privacy:** `clips/` is git-ignored. `--share` exports per-frame numbers without landmark
+  points, for tuning help without sending video.
+- **Tested end to end** on the public-domain test portrait (mp4 → ffmpeg → model → checker):
+  a 2.6 s closure at 20.0 s gives L1 at 21.1 s, and a wrong expectation fails with its reason.
+
+Recording list and instructions: [P7_RECORDING_GUIDE.md](P7_RECORDING_GUIDE.md).
+
 ## 5. Safety rules for every change
 
 1. A fix that removes false alerts must not remove a real one. Every relaxation (T1, T2, T5, T7) has a "guard" case in group B.

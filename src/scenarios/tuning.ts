@@ -38,7 +38,7 @@ export const TUNABLE: readonly string[] = [
 
 export const FACTORS: readonly number[] = [0.6, 0.7, 0.8, 0.85, 0.9, 0.95, 1.05, 1.1, 1.15, 1.2, 1.3, 1.5]
 
-const MUST_ALARM_KINDS = new Set(['alarm', 'level', 'advisory', 'stops', 'deescalates', 'chime'])
+const MUST_ALARM_KINDS = new Set(['alarm', 'level', 'advisory', 'stops', 'deescalates', 'chime', 'speaks'])
 
 /** A case where the app must DO something: missing it is the worst outcome. */
 export function isMustAlarm(s: Scenario): boolean {

@@ -20,7 +20,14 @@ const FRAME_WIDTH = 480
 declare global {
   interface Window {
     /** Set when the page is opened with ?replay — the replay harness reads it (SPEC §15). */
-    __biomonitorReplay?: { backend: Backend | null; samples: Sample[]; errors: string[] };
+    __biomonitorReplay?: {
+      backend: Backend | null;
+      samples: Sample[];
+      errors: string[];
+      /** performance.now() when the camera was requested / opened: a replayed video starts in between (P7 clip marks). */
+      cameraRequestedAt: number | null;
+      cameraOpenedAt: number | null;
+    };
   }
 }
 
@@ -74,9 +81,10 @@ export function useVisionPipeline(debug: boolean) {
     if (video === null || parts.current.camera !== null) return
     setError(null)
     setStatus('starting')
-    if (replay) window.__biomonitorReplay = { backend: null, samples: [], errors: [] }
+    if (replay) window.__biomonitorReplay = { backend: null, samples: [], errors: [], cameraRequestedAt: performance.now(), cameraOpenedAt: null }
     try {
       const camera = await openCamera(video, { onEnded: () => fail(new Error('The camera stopped.')) })
+      if (window.__biomonitorReplay) window.__biomonitorReplay.cameraOpenedAt = performance.now()
       parts.current.camera = camera
       const engine = await startVisionEngine({ onFatal: fail, preferGpu, preferWorker })
       parts.current.engine = engine

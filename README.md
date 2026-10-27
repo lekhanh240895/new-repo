@@ -125,6 +125,21 @@ After a trip, the summary lets the driver mark an alert as a false alarm. Each m
 that alert type by 5%, at most +10%, stored only on the phone. Phone looks and long eye
 closures (L2, L3) never change.
 
+### Real clips (P7)
+
+The synthetic scenarios guess some numbers (how low the lids drop on a speedometer glance,
+what a laugh looks like). Check them on your own face: record short clips **parked or at a
+desk, never while driving**, describe them in `clips/manifest.json`, and run:
+
+```bash
+npm run build && npm run clips   # → clips/CLIP_REPORT.md
+```
+
+Each clip plays through the real model in Chromium and is judged by the same code as the
+scenarios. A short "sign check" clip also confirms the head and eye direction signs for your
+phone. `clips/` is git-ignored: it shows a real face. Guide:
+[docs/P7_RECORDING_GUIDE.md](docs/P7_RECORDING_GUIDE.md).
+
 ### Project layout
 
 ```
@@ -163,7 +178,8 @@ New versions are never applied in the middle of a trip: the start screen offers 
 | **M2** ✅ | Calibration, detectors, alerts (sound, voice, vibration), Wake Lock, watchdog, trip controller |
 | **M3** ✅ | Dark Cockpit UI, onboarding, Vietnamese, offline PWA, CSP, battery + pause notification — **v0.1.0** |
 | **P1–P6** ✅ | Alert accuracy: 102-case scenario library + ratchet; speed context, motion sensors, gaze zones, hysteresis; attention buffer, face-lost context; robust eye closure, drowsy eyes, clean fatigue signals; smarter alarm behavior; boundary pairs, tuning report, "false alarm" marking |
-| Next | P7 real clips · real-device checks (signs, thresholds) |
+| **P7** 🎬 | Real-clip kit ready (`npm run clips`, sign check, recording guide) — waiting for recordings |
+| Next | Fixes from the clip report · GPS / gyroscope checks on a real drive |
 
 ## License
 

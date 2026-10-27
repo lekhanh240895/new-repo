@@ -1,0 +1,76 @@
+{
+  "clips": [
+    {
+      "id": "SIGNS",
+      "file": "signs.mp4",
+      "title": "Sign check: head right, head down, eyes right, eyes down",
+      "signCheck": {
+        "straight": [1, 4],
+        "headRight": [6, 8.5],
+        "headDown": [11, 13.5],
+        "eyesRight": [16, 18.5],
+        "eyesDown": [21, 23.5]
+      }
+    },
+    {
+      "id": "R01",
+      "file": "r01-microsleep.mp4",
+      "title": "Eyes closed 3 s (must alarm)",
+      "calibrate": [0, 10],
+      "marks": { "sleep": 15 },
+      "expect": [
+        { "kind": "level", "level": "L1", "after": "sleep", "within": 1500 },
+        { "kind": "level", "level": "L3", "after": "sleep", "within": 2500 }
+      ]
+    },
+    {
+      "id": "C01",
+      "file": "c01-speedometer.mp4",
+      "title": "Five speedometer glances of 1.5 s: lids drop, no microsleep; then eyes closed 3 s",
+      "calibrate": [0, 10],
+      "marks": { "sleep": 40 },
+      "expect": [
+        { "kind": "noAlarm", "family": "L", "to": "sleep" },
+        { "kind": "alarm", "family": "L", "after": "sleep", "within": 1500 }
+      ]
+    },
+    {
+      "id": "B01",
+      "file": "b01-phone-lap.mp4",
+      "title": "Phone in the lap 4 s: distraction, not microsleep",
+      "calibrate": [0, 10],
+      "marks": { "phone": 15 },
+      "expect": [
+        { "kind": "alarm", "family": "D", "after": "phone", "within": 2800 },
+        { "kind": "noAlarm", "family": "L" }
+      ]
+    },
+    {
+      "id": "B05",
+      "file": "b05-red-light.mp4",
+      "title": "Phone at a red light, then the car moves (speed simulated)",
+      "calibrate": [0, 10],
+      "speed": [{ "at": 0, "kmh": 30 }, { "at": 12, "kmh": 0 }, { "at": 20, "kmh": 15 }],
+      "marks": { "go": 20 },
+      "expect": [{ "kind": "alarm", "family": "D", "after": "go", "within": 1500 }]
+    },
+    {
+      "id": "C04",
+      "file": "c04-laugh.mp4",
+      "title": "Laugh hard 2 s, then eyes closed 3 s",
+      "calibrate": [0, 10],
+      "marks": { "laugh": 15, "sleep": 25 },
+      "expect": [
+        { "kind": "noAlarm", "family": "L", "from": "laugh", "to": "sleep" },
+        { "kind": "alarm", "family": "L", "after": "sleep", "within": 1500 }
+      ]
+    },
+    {
+      "id": "D07",
+      "file": "d07-sunglasses.mp4",
+      "title": "Sunglasses on for the whole clip",
+      "calibrate": [0, 10],
+      "expect": [{ "kind": "speaks", "message": "eyesHidden" }]
+    }
+  ]
+}

@@ -28,5 +28,5 @@ public/models/
 public/mediapipe/
 
 # Replay outputs and local clips
-replay-out/
-clips/
+/replay-out/
+/clips/

@@ -25,7 +25,7 @@ export interface ScenarioResult {
   timeline: string[];
 }
 
-interface TimedEffect {
+export interface TimedEffect {
   t: number;
   effect: Effect;
 }
@@ -204,11 +204,70 @@ function evaluate(exp: Expectation, effects: readonly TimedEffect[], marks: Read
       }
       return n <= exp.count ? null : `${n} ${exp.family} alarm episodes (max ${exp.count})`
     }
+    case 'speaks': {
+      const hit = effects.find((e) => e.effect.type === 'speak' && e.effect.message === exp.message)
+      return hit ? null : `never said "${exp.message}"`
+    }
     case 'chime': {
       const hit = effects.find((e) => e.effect.type === 'chime' && e.effect.kind === exp.chime)
       return hit ? null : `missing chime ${exp.chime}`
     }
   }
+}
+
+/** One frame to play: what the vision worker reported, and what the car was doing. */
+export interface PlayFrame {
+  raw: FrameResult;
+  ctx: Context;
+}
+
+/**
+ * Plays frames through quality gates → smoothing → detectors → state machine,
+ * starting in MONITORING with the given baseline. Used for synthetic scenarios
+ * and for real recorded clips (P7), so both are judged by the same code.
+ */
+export function playFrames(frames: Iterable<PlayFrame>, baseline: Baseline, cfg: Config = DEFAULT_CONFIG): { effects: TimedEffect[]; endT: number } {
+  const quality = createQualityTracker(cfg.quality)
+  quality.setBaselineJitter(baseline.jitter)
+  const smoother = createSignalSmoother()
+  const pipeline = createSignalPipeline(cfg, baseline)
+  let session = monitoringSession()
+  const effects: TimedEffect[] = []
+  let endT = 0
+  for (const { raw, ctx: c } of frames) {
+    const ctx = { ...DEFAULT_CTX, ...c }
+    const t = raw.t
+    endT = t
+    const processed: ProcessedFrame = { raw, smooth: smoother.smooth(raw), ...quality.update(raw) }
+    const armed = ctx.location ? isArmed(ctx.speed, cfg.speed.armAboveKmh) : true
+    const out = pipeline.update(processed, {
+      armed,
+      alarmActive: session.monitoring.latched !== null,
+      // Decisions 2 and 3: location and motion sensors are on by default.
+      ...(ctx.location && { speedKmh: ctx.speed }),
+      motion: { turnRate: ctx.turn ?? 0, still: ctx.accelStill ?? false },
+    })
+    const r = reduce(session, { type: 'FRAME', signals: out.signals }, cfg)
+    session = r.state
+    for (const effect of r.effects) effects.push({ t, effect })
+  }
+  return { effects, endT }
+}
+
+/** Checks every expectation; returns one line per broken one (empty = pass). */
+export function evaluateAll(expect: readonly Expectation[], effects: readonly TimedEffect[], marks: ReadonlyMap<string, number>, endT: number): string[] {
+  return expect.flatMap((e) => {
+    const r = evaluate(e, effects, marks, endT)
+    return r === null ? [] : [r]
+  })
+}
+
+/** Short timeline of effects, e.g. "2.1s alarm:D1". */
+export function describeTimeline(effects: readonly TimedEffect[], offsetMs = 0): string[] {
+  return effects.flatMap((e) => {
+    const d = describe({ ...e, t: e.t - offsetMs })
+    return d === null ? [] : [d]
+  })
 }
 
 export function runScenario(s: Scenario, cfg: Config = DEFAULT_CONFIG): ScenarioResult {
@@ -224,50 +283,21 @@ export function runScenario(s: Scenario, cfg: Config = DEFAULT_CONFIG): Scenario
     return { id: s.id, status: reason === null ? 'pass' : 'fail', reasons: reason === null ? [] : [reason], timeline: [] }
   }
 
-  const segments = s.segments ?? []
   const fps = s.fps ?? 15
-  const baseline: Baseline = { ...SCENARIO_BASELINE, ...s.baseline }
-  const quality = createQualityTracker(cfg.quality)
-  quality.setBaselineJitter(baseline.jitter)
-  const smoother = createSignalSmoother()
-  const pipeline = createSignalPipeline(cfg, baseline)
-  let session = monitoringSession()
-  const effects: TimedEffect[] = []
   const marks = new Map<string, number>()
-
+  const frames: PlayFrame[] = []
   let frame = 0
-  let t = 0
-  for (const seg of segments) {
-    const startT = Math.round((frame * 1000) / fps)
-    if (seg.mark !== undefined) marks.set(seg.mark, startT)
+  for (const seg of s.segments ?? []) {
+    if (seg.mark !== undefined) marks.set(seg.mark, Math.round((frame * 1000) / fps))
     const ctx = { ...DEFAULT_CTX, ...s.ctx, ...seg.ctx }
     const n = Math.max(1, Math.round((seg.ms * fps) / 1000))
     for (let i = 0; i < n; i++) {
-      t = Math.round((frame * 1000) / fps)
+      const t = Math.round((frame * 1000) / fps)
       frame++
-      const raw = frameFor(t, seg.look, cfg)
-      const processed: ProcessedFrame = { raw, smooth: smoother.smooth(raw), ...quality.update(raw) }
-      const armed = ctx.location ? isArmed(ctx.speed, cfg.speed.armAboveKmh) : true
-      const out = pipeline.update(processed, {
-        armed,
-        alarmActive: session.monitoring.latched !== null,
-        // Decisions 2 and 3: location and motion sensors are on by default.
-        ...(ctx.location && { speedKmh: ctx.speed }),
-        motion: { turnRate: ctx.turn ?? 0, still: ctx.accelStill ?? false },
-      })
-      const r = reduce(session, { type: 'FRAME', signals: out.signals }, cfg)
-      session = r.state
-      for (const effect of r.effects) effects.push({ t, effect })
+      frames.push({ raw: frameFor(t, seg.look, cfg), ctx })
     }
   }
-
-  const reasons = (s.expect ?? []).flatMap((e) => {
-    const r = evaluate(e, effects, marks, t)
-    return r === null ? [] : [r]
-  })
-  const timeline = effects.flatMap((e) => {
-    const d = describe(e)
-    return d === null ? [] : [d]
-  })
-  return { id: s.id, status: reasons.length === 0 ? 'pass' : 'fail', reasons, timeline }
+  const { effects, endT } = playFrames(frames, { ...SCENARIO_BASELINE, ...s.baseline }, cfg)
+  const reasons = evaluateAll(s.expect ?? [], effects, marks, endT)
+  return { id: s.id, status: reasons.length === 0 ? 'pass' : 'fail', reasons, timeline: describeTimeline(effects) }
 }

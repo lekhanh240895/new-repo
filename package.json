@@ -27,7 +27,8 @@
     "check": "npm run typecheck && npm run lint && npm run test",
     "offline-check": "node scripts/offline-check.mjs",
     "scenarios": "node scripts/scenarios.ts",
-    "tune": "node scripts/tune.ts"
+    "tune": "node scripts/tune.ts",
+    "clips": "node scripts/clips.ts"
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "1.1.1",

@@ -117,6 +117,9 @@ try {
       meanFps: mean(samples.slice(-30).map((s) => s.fps)),
       sensors,
       errors: [...data.errors, ...consoleErrors],
+      // Time zero of the video, for clip marks (P7).
+      cameraRequestedAt: data.cameraRequestedAt ?? null,
+      cameraOpenedAt: data.cameraOpenedAt ?? null,
     }
 
     await mkdir(dirname(out), { recursive: true })

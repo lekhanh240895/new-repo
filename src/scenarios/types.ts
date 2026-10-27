@@ -96,6 +96,8 @@ export type Expectation =
   /** At most `count` alarms of a family in the whole scenario (rate limit). */
   | { kind: 'maxAlarms'; family: AlarmFamily; count: number }
   | { kind: 'chime'; chime: 'monitoringOff' | 'paused' }
+  /** This voice message is spoken (e.g. "eyes hidden" with sunglasses, D07). */
+  | { kind: 'speaks'; message: 'fatigueAdvisory' | 'fatigueStrong' | 'takeBreak' | 'eyesHidden' }
 
 export type TestType = 'S' | 'S,D' | 'S,R' | 'R'
 
