@@ -251,8 +251,34 @@ Still to confirm on a real phone (each is one config value if wrong):
 4. Assumption in A37/A38: when smiling or behind glasses, the iris may read "down" but the
    `eyeLookDown` blendshape does not (P7 clips).
 
-Still failing, by phase: P3 — A02, A17, A20, B02, B06, D03 · P4 — B01, C01, C02, C04–C07, C15,
-D01, D02, D09, E05–E11, F06 · P5 — B05, F01–F03.
+### P3 results (attention buffer, scanning, face lost)
+
+**72 pass, 22 fail, 8 need a real clip** (was 66 / 28 / 8). **6 improved (A02, A17, A20, B02,
+B06, D03), 0 regressed.**
+
+What changed:
+- **Attention buffer (T4, AttenD):** a 2 s buffer drains while the eyes are off the road and
+  refills (1:1) after 0.1 s back on the road. Empty buffer → D1; still empty after 1.5 s → D2.
+  One 2 s glance from a full buffer alarms at 2.0 s, exactly like before. What is new: two
+  1.5 s phone looks with 0.3 s of road between now alarm (B02), and so does a fast
+  left-right-left with almost no road time (the old rule reset at every glance).
+- **Zone budgets inside the buffer:** a budget longer than 2 s (mirror 2.5 s, rear-view 3 s,
+  slow-speed side 3.5 s) is a grace period before the buffer drains. A shorter one (blind
+  spot 1.5 s) drains faster. Phone / lap / console get no grace (guard B12 still passes).
+- **Scanning (T5):** each new zone starts its own grace period, so left → right scans at a
+  slow-speed intersection do not add up (A02, A20).
+- **30 s total:** only phone-like looks (lap, center console) count now. Passenger and window
+  looks are covered by the buffer (A17). The rule still catches many short phone looks (B11).
+- **Face lost (T15):** the app looks at the raw head motion in the last 0.3 s before the face
+  was lost. Fast drop (≥ 60°/s down, or already ≥ 20° down) → treated as closed eyes, so a
+  microsleep alarm starts from that moment (D03). Fast turn (≥ 60°/s, or ≥ 40° to the side) →
+  blind-spot check: 1.5 s allowed, then D1 (B06). Anything else → unknown, as before.
+
+To confirm on a real phone (P7): the 60°/s thresholds against real shoulder checks and real
+head drops.
+
+Still failing, by phase: P4 — B01, C01, C02, C04–C07, C15, D01, D02, D09, E05–E11, F06 ·
+P5 — B05, F01–F03.
 
 ## 5. Safety rules for every change
 

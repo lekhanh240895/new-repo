@@ -145,6 +145,34 @@ export interface ZoneBudgetConfig {
   escalateMs: number;
   /** At slow speed, side and mirror looks get at least this long (decision 4). Never phone/lap/console. */
   slowSideMs: number;
+  /** Face lost after turning fast to the side (blind-spot / shoulder check). */
+  blindSpotMs: number;
+}
+
+/**
+ * Attention buffer (T4, after AttenD — Kircher & Ahlström 2009). Drains while
+ * the eyes are off the road, refills when they come back. Each zone budget
+ * (ZoneBudgetConfig) sets the grace before draining (budget > capacity) or a
+ * faster drain (budget < capacity). An empty buffer raises D1.
+ */
+export interface AttentionConfig {
+  capacityMs: number;
+  /** Back on the road for this long before the buffer refills. */
+  refillLatencyMs: number;
+  /** Refill speed: buffer ms gained per ms on the road. */
+  refillRate: number;
+}
+
+/** Face lost right after fast head motion (T15). */
+export interface FaceLossConfig {
+  /** Look at the head motion over this window just before the face was lost. */
+  lookbackMs: number;
+  /** Turned away: last head angle beyond this, or turning faster than turnAwayRateDegS (over the lookback). */
+  turnAwayYawDeg: number;
+  turnAwayRateDegS: number;
+  /** Head drop: last head-down angle beyond this, or dropping faster than dropRateDegS. */
+  dropDownDeg: number;
+  dropRateDegS: number;
 }
 
 /** Speed classes from GPS (T1). Below `maneuverBelowKmh` there are no distraction alarms. */
@@ -259,6 +287,8 @@ export interface Config {
   speed: SpeedConfig;
   zones: ZoneConfig;
   budgets: ZoneBudgetConfig;
+  attention: AttentionConfig;
+  faceLoss: FaceLossConfig;
   speedContext: SpeedContextConfig;
   motion: MotionConfig;
   pose: PoseConfig;
@@ -385,6 +415,19 @@ export const DEFAULT_CONFIG: Readonly<Config> = Object.freeze<Config>({
     lapMs: 2.0 * SECOND,
     escalateMs: 1.5 * SECOND,
     slowSideMs: 3.5 * SECOND,
+    blindSpotMs: 1.5 * SECOND,
+  },
+  attention: {
+    capacityMs: 2 * SECOND,
+    refillLatencyMs: 100,
+    refillRate: 1,
+  },
+  faceLoss: {
+    lookbackMs: 300,
+    turnAwayYawDeg: 40,
+    turnAwayRateDegS: 60,
+    dropDownDeg: 20,
+    dropRateDegS: 60,
   },
   speedContext: {
     stoppedBelowKmh: 3,

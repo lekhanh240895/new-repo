@@ -39,6 +39,11 @@ export function createMonitoringState(): MonitoringState {
     openSince: null,
     restClosedSince: null,
     offRoadSince: null,
+    buffer: null,
+    glanceStart: null,
+    glanceZone: null,
+    onRoadSince: null,
+    emptySince: null,
     offRoadLog: [],
     recoveredSince: null,
     blindSince: null,
@@ -122,7 +127,8 @@ export function stepMonitoring(
     strongShiftUntil !== null && t < strongShiftUntil ? cfg.fatigue.strongThresholdShiftMs : 0
 
   // --- Eye closure (or head drop in degraded mode) ---
-  const rawClosed = blind ? null : degraded ? s.headDropped : s.eyesClosed
+  // Face lost right after a fast head drop counts as closed eyes (T15).
+  const rawClosed = blind ? (s.assumeClosed ? true : null) : degraded ? s.headDropped : s.eyesClosed
   let closedNow: boolean
   if (rawClosed === null) {
     // Unknown this frame. Worst case wins (SPEC §10.5): if a microsleep alarm is
@@ -164,25 +170,53 @@ export function stepMonitoring(
   if (degraded && micro === 'L3') micro = 'L2'
 
   // --- Eyes off road ---
-  const rawOff = blind ? null : s.offRoad
+  // Face lost right after a fast turn to the side counts as off road (T15).
+  const rawOff = blind ? (s.assumeOffRoad ? true : null) : s.offRoad
   let offNow = rawOff === null ? m.offRoadSince !== null || isDistraction(m.latched) : rawOff
   if (!armedD) offNow = false
 
-  // Each gaze zone has its own budget (T3); driving looks (mirrors, speedometer) do not add to the total.
+  // Each gaze zone has its own budget (T3); only phone-like looks add to the 30 s total.
   const d1Ms = s.offRoadD1Ms ?? cfg.offRoad.d1Ms
   const d2Ms = s.offRoadD2Ms ?? cfg.offRoad.d2Ms
   const countsTowardShare = s.countsTowardShare ?? true
   const offRoadSince = offNow ? (m.offRoadSince ?? t) : null
-  const offContinuousMs = offRoadSince === null ? 0 : t - offRoadSince
   const windowStart = t - cfg.offRoad.windowMs
   const offRoadLog = m.offRoadLog.filter((e) => e.t > windowStart)
   if (offNow && countsTowardShare && dt > 0) offRoadLog.push({ t, dt })
   const offTotalMs = offRoadLog.reduce((sum, e) => sum + e.dt, 0)
 
+  // Attention buffer (T4). A zone budget above the capacity is a grace period before
+  // draining; below it, a faster drain (0 = empty at once). Each new zone starts a new
+  // glance with its own grace, so left-right scanning at slow speed is not punished (T5),
+  // while lap/phone has no grace at all (guard B12).
+  const att = cfg.attention
+  let buffer = m.buffer ?? att.capacityMs
+  let glanceStart: number | null = null
+  let glanceZone: string | null = null
+  let onRoadSince: number | null = null
+  if (offNow) {
+    const zoneKey = s.zone ?? m.glanceZone ?? 'unknown'
+    const sameGlance = m.glanceStart !== null && (s.zone === undefined || zoneKey === m.glanceZone)
+    glanceStart = sameGlance ? m.glanceStart : t
+    glanceZone = zoneKey
+    const grace = Math.max(0, d1Ms - att.capacityMs)
+    if (d1Ms <= 0) {
+      buffer = 0
+    } else {
+      const rate = d1Ms >= att.capacityMs ? 1 : att.capacityMs / d1Ms
+      const draining = Math.max(0, Math.min(dt, t - (glanceStart ?? t) - grace))
+      buffer = Math.max(0, buffer - draining * rate)
+    }
+  } else {
+    onRoadSince = m.onRoadSince ?? t
+    if (t - onRoadSince >= att.refillLatencyMs) buffer = Math.min(att.capacityMs, buffer + dt * att.refillRate)
+  }
+  const emptySince = offNow && buffer <= 0 ? (m.emptySince ?? t) : null
+
   let dist: AlarmLevel | null = null
-  if (offNow && (offContinuousMs >= d2Ms || (countsTowardShare && offTotalMs > cfg.offRoad.windowTotalMs))) {
+  if (offNow && ((emptySince !== null && t - emptySince >= d2Ms - d1Ms) || (countsTowardShare && offTotalMs > cfg.offRoad.windowTotalMs))) {
     dist = 'D2'
-  } else if (offContinuousMs >= d1Ms) {
+  } else if (emptySince !== null) {
     dist = 'D1'
   }
 
@@ -269,6 +303,11 @@ export function stepMonitoring(
       openSince,
       restClosedSince,
       offRoadSince,
+      buffer,
+      glanceStart,
+      glanceZone,
+      onRoadSince,
+      emptySince,
       offRoadLog,
       recoveredSince,
       blindSince,

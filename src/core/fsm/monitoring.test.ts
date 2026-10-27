@@ -114,7 +114,8 @@ describe('eyes off road (SPEC §10.3)', () => {
   })
 
   it('raises D2 when short glances add up to more than 6 s in 30 s', () => {
-    const r = runTrace([OPEN, ...repeat(4, [away(1800), ahead(1000)])])
+    // Each glance is short and the buffer refills between them; the total still adds up.
+    const r = runTrace([OPEN, ...repeat(6, [away(1200), ahead(1400)])])
     expect(effectNames(r.effects)).toContain('alarm:D2')
     expect(effectNames(r.effects)).not.toContain('alarm:D1')
   })
@@ -201,7 +202,9 @@ describe('P2: per-zone budgets and split arming', () => {
   })
 
   it('driving looks do not add to the 30 s total', () => {
-    const glances = Array.from({ length: 8 }, () => [{ ms: 1500, with: { offRoad: true, countsTowardShare: false } }, { ms: 1000 }]).flat()
+    // Mirror budget (2.5 s): 0.5 s grace per glance, so the buffer only loses 0.1 s per cycle.
+    const mirror = { offRoad: true, countsTowardShare: false, offRoadD1Ms: 2500, offRoadD2Ms: 4000 }
+    const glances = Array.from({ length: 8 }, () => [{ ms: 1500, with: mirror }, { ms: 1000 }]).flat()
     expect(effectNames(runTrace([{ ms: 1000 }, ...glances]).effects)).toEqual([])
   })
 
@@ -221,3 +224,50 @@ describe('P2: per-zone budgets and split arming', () => {
   })
 })
 
+
+describe('P3: attention buffer (T4, AttenD)', () => {
+  it('one 1.9 s glance from a full buffer is fine', () => {
+    expect(effectNames(runTrace([OPEN, away(1900), ahead(2000)]).effects)).toEqual([])
+  })
+
+  it('a 2 s glance from a full buffer raises D1, like the old fixed rule', () => {
+    const r = runTrace([OPEN, away(2300)])
+    near(firstTimeOf(r, 'alarm:D1'), 2000 + 2000)
+  })
+
+  it('back-to-back glances with almost no road time in between empty the buffer (A02)', () => {
+    // 1.5 s away, 0.3 s on the road, 1.5 s away: no single glance reaches 2 s.
+    const r = runTrace([OPEN, away(1500), ahead(300), away(1500)])
+    expect(effectNames(r.effects)).toEqual(['alarm:D1'])
+  })
+
+  it('refills only after 0.1 s back on the road', () => {
+    // 1.5 s away, under 0.1 s back (no refill), then away: empty about 0.5 s into the
+    // second glance (plus one frame per glance start). With 0.5 s back it lasts longer.
+    const quick = firstTimeOf(runTrace([OPEN, away(1500), ahead(90), away(1500)]), 'alarm:D1') ?? Infinity
+    expect(quick - (2000 + 1500 + 90)).toBeLessThanOrEqual(500 + 3 * FRAME_MS)
+    const rested = firstTimeOf(runTrace([OPEN, away(1500), ahead(500), away(1500)]), 'alarm:D1') ?? Infinity
+    expect(rested - (2000 + 1500 + 500)).toBeGreaterThan(800)
+  })
+
+  it('a zone budget above the capacity is a grace period before draining (mirror 2.5 s)', () => {
+    const mirror = { offRoad: true, offRoadD1Ms: 2500, offRoadD2Ms: 4000, countsTowardShare: false }
+    const r = runTrace([OPEN, { ms: 2700, with: mirror }])
+    near(firstTimeOf(r, 'alarm:D1'), 2000 + 2500)
+  })
+
+  it('a new zone starts a new grace period: scanning left then right (T5)', () => {
+    const side = (zone: 'sideLeft' | 'sideRight') => ({ ms: 2500, with: { offRoad: true, zone, offRoadD1Ms: 3500, offRoadD2Ms: 5000, countsTowardShare: false } })
+    expect(effectNames(runTrace([OPEN, side('sideLeft'), side('sideRight')]).effects)).toEqual([])
+  })
+
+  it('D2 follows D1 after the escalation time', () => {
+    const r = runTrace([OPEN, away(4000)])
+    near(firstTimeOf(r, 'alarm:D2'), 2000 + 3500)
+  })
+
+  it('a glance leaves the buffer partly drained', () => {
+    const r = runTrace([OPEN, away(1500)])
+    expect(r.state.monitoring.buffer).toBeLessThan(DEFAULT_CONFIG.attention.capacityMs)
+  })
+})

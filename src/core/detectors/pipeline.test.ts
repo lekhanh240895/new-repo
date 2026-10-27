@@ -169,3 +169,28 @@ describe('end to end: camera numbers → alerts', () => {
     expect(drive(droopy).effects[0]).toBe('speak:fatigueAdvisory')
   })
 })
+
+describe('face lost: why? (T15)', () => {
+  const lost = { faceFound: false }
+  // Signs: DEFAULT_CONFIG.pose.headDownSign = -1 (pitch below baseline = down), yawRightSign = 1.
+  it('a fast head drop just before the loss counts as closed eyes (D03)', () => {
+    const r = drive([{ ms: 3000 }, { ms: 140, spec: { pitch: -15 } }, { ms: 140, spec: { pitch: -30 } }, { ms: 2500, spec: lost }])
+    expect(r.effects[0]).toBe('alarm:L1')
+  })
+
+  it('a fast turn to the side before the loss is a blind-spot check: quiet for 1.5 s (A07)', () => {
+    expect(drive([{ ms: 3000 }, { ms: 140, spec: { yaw: -25 } }, { ms: 1200, spec: lost }, { ms: 3000 }]).effects).toEqual([])
+  })
+
+  it('…but the face staying away longer raises D1 (B06)', () => {
+    expect(drive([{ ms: 3000 }, { ms: 140, spec: { yaw: -25 } }, { ms: 2500, spec: lost }]).effects).toContain('alarm:D1')
+  })
+
+  it('a slow, small move before the loss tells nothing: no assumption', () => {
+    const p = createSignalPipeline(cfg, BASE)
+    for (const f of framesFrom([{ ms: 1000 }, { ms: 1000, spec: { yaw: -5 } }])) p.update(f, ctx)
+    const s = p.update(processed(2100, lost), ctx).signals
+    expect(s.assumeOffRoad).toBeUndefined()
+    expect(s.assumeClosed).toBeUndefined()
+  })
+})

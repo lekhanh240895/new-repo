@@ -101,8 +101,12 @@ export interface ZonePolicy {
 }
 
 const SIDE_ZONES: ReadonlySet<GazeZone> = new Set(['mirrorLeft', 'mirrorRight', 'sideLeft', 'sideRight', 'rearview'])
-/** Looks that are part of driving do not add to the "time off road within 30 s" total. */
-const SHARE_ZONES: ReadonlySet<GazeZone> = new Set(['lap', 'console', 'sideLeft', 'sideRight'])
+/**
+ * Only phone-like looks add to the "time off road within 30 s" total (visual
+ * time-sharing). Side looks (passenger, window) are handled by the attention
+ * buffer alone: short glances with road time between are fine (A17).
+ */
+const SHARE_ZONES: ReadonlySet<GazeZone> = new Set(['lap', 'console'])
 
 /**
  * Budget for a zone at a speed. Phone/lap and console budgets never relax with

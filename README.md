@@ -112,7 +112,8 @@ npm run scenarios -- --only A07   # one scenario with its alert timeline
 `npm test` includes a ratchet: a scenario that passed in `src/scenarios/baseline.ts` must keep
 passing. After a fix, record the new passes with `npm run scenarios -- --update-baseline`.
 
-Progress: v0.1 passed 40 scenarios; after P2 (speed context, motion sensors, gaze zones) **66**.
+Progress: v0.1 passed 40 scenarios; after P2 (speed context, motion sensors, gaze zones) **66**;
+after P3 (attention buffer, scanning, face-lost context) **72** of 102.
 
 ### Project layout
 
@@ -151,8 +152,8 @@ New versions are never applied in the middle of a trip: the start screen offers 
 | **M1** ✅ | Camera, vision worker + fallback, signals, quality gates, Debug mode, replay harness |
 | **M2** ✅ | Calibration, detectors, alerts (sound, voice, vibration), Wake Lock, watchdog, trip controller |
 | **M3** ✅ | Dark Cockpit UI, onboarding, Vietnamese, offline PWA, CSP, battery + pause notification — **v0.1.0** |
-| **P1–P2** ✅ | Alert accuracy: 102-case scenario library + ratchet; speed context, motion sensors, gaze zones, hysteresis |
-| Next | P3 attention buffer + scanning · P4 eye-closure robustness · P5 alarm behavior · real-device checks |
+| **P1–P3** ✅ | Alert accuracy: 102-case scenario library + ratchet; speed context, motion sensors, gaze zones, hysteresis; attention buffer, face-lost context |
+| Next | P4 eye-closure robustness · P5 alarm behavior · P6 tuning · real-device checks |
 
 ## License
 

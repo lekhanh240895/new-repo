@@ -54,6 +54,15 @@ export interface MonitoringState {
   /** Eyes closed while stopped (no alarms then): for the "resting eyes" advisory. */
   restClosedSince: number | null;
   offRoadSince: number | null;
+  /** Attention buffer in ms (T4). null = full (attention.capacityMs). */
+  buffer: number | null;
+  /** Start of the current off-road glance, and its zone (a new zone = a new glance with its own grace). */
+  glanceStart: number | null;
+  glanceZone: string | null;
+  /** Back on the road since (for the refill latency). */
+  onRoadSince: number | null;
+  /** Buffer empty since (D1); D2 follows after the escalation time. */
+  emptySince: number | null;
   /** Off-road time per frame inside the sliding window. */
   offRoadLog: readonly { t: number; dt: number }[];
   recoveredSince: number | null;

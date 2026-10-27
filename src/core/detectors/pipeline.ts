@@ -33,6 +33,9 @@ export interface SignalDebug {
   needsRecalibration: boolean;
 }
 
+/** How the face was lost, from the head motion just before (T15). */
+export type FaceLossKind = 'drop' | 'turnLeft' | 'turnRight'
+
 export interface MotionState {
   /** Car turning rate from the gyroscope, °/s (> 0 = right); null = no sensor. */
   turnRate: number | null;
@@ -74,6 +77,27 @@ export function createSignalPipeline(cfg: Config, baseline: Baseline): SignalPip
   const zones = createZoneTracker(cfg.zones.dwellMs)
   let lastPolicy: ZonePolicy = { offRoad: false, turningInto: false, d1Ms: cfg.offRoad.d1Ms, d2Ms: cfg.offRoad.d2Ms, countsTowardShare: false }
   let turningIntoSince: number | null = null
+  // Recent raw head angles (not smoothed: the filter would hide a fast move) for T15.
+  let headTrail: { t: number; yaw: number; down: number }[] = []
+  let faceLoss: FaceLossKind | null | undefined
+
+  /** Why the face was lost, from how the head moved just before (T15). */
+  function classifyFaceLoss(t: number): FaceLossKind | null {
+    const f = cfg.faceLoss
+    const last = headTrail[headTrail.length - 1]
+    const first = headTrail[0]
+    // The face must have been seen just now; otherwise we cannot tell.
+    if (last === undefined || first === undefined || t - last.t > f.lookbackMs) return null
+    const span = Math.max(1, last.t - first.t) / 1000
+    const downRate = (last.down - first.down) / span
+    const yawRate = (last.yaw - first.yaw) / span
+    // A head drop is checked first: missing a microsleep is worse than a false distraction.
+    if (last.down >= f.dropDownDeg || (headTrail.length > 1 && downRate >= f.dropRateDegS)) return 'drop'
+    if (Math.abs(last.yaw) >= f.turnAwayYawDeg || (headTrail.length > 1 && Math.abs(yawRate) >= f.turnAwayRateDegS)) {
+      return (Math.abs(last.yaw) >= f.turnAwayYawDeg ? last.yaw : yawRate) > 0 ? 'turnRight' : 'turnLeft'
+    }
+    return null
+  }
 
   function fatigueLevel(t: number, p: number | null): FatigueLevel {
     const f = cfg.fatigue
@@ -99,6 +123,22 @@ export function createSignalPipeline(cfg: Config, baseline: Baseline): SignalPip
       // --- Head pose relative to baseline (physical directions: down > 0, right > 0) ---
       const downDeg = seen && smooth.pose ? (smooth.pose.pitchDeg - baseline.pitchDeg) * cfg.pose.headDownSign : null
       const yawDeg = seen && smooth.pose ? (smooth.pose.yawDeg - baseline.yawDeg) * cfg.pose.yawRightSign : null
+
+      // --- Face lost: why? (T15) Decided once, at the moment of loss ---
+      const rawPose = frame.raw.faceFound ? frame.raw.pose : undefined
+      if (seen && rawPose !== undefined) {
+        headTrail.push({
+          t,
+          yaw: (rawPose.yawDeg - baseline.yawDeg) * cfg.pose.yawRightSign,
+          down: (rawPose.pitchDeg - baseline.pitchDeg) * cfg.pose.headDownSign,
+        })
+        headTrail = headTrail.filter((h) => h.t >= t - cfg.faceLoss.lookbackMs)
+        faceLoss = undefined
+      } else if (!seen) {
+        if (faceLoss === undefined) faceLoss = classifyFaceLoss(t)
+        headTrail = []
+      }
+      const lossKind = seen ? null : (faceLoss ?? null)
 
       // --- Eyes ---
       const range = ear.current()
@@ -148,6 +188,8 @@ export function createSignalPipeline(cfg: Config, baseline: Baseline): SignalPip
         rawZone = classifyZone(g.yaw, g.pitch, zones.current(), cfg.zones)
       }
       const zone = zones.update(t, rawZone)
+      // Turned away fast and the face is gone: a shoulder / blind-spot check (or the back seat).
+      const assumedZone: GazeZone | null = lossKind === 'turnLeft' ? 'sideLeft' : lossKind === 'turnRight' ? 'sideRight' : null
 
       // --- Speed context (T1) and turning (T2) decide the budget for this zone ---
       const sc = ctx.speedKmh === undefined ? null : speedClass(ctx.speedKmh, ctx.motion?.still ?? false, cfg.speedContext)
@@ -161,6 +203,9 @@ export function createSignalPipeline(cfg: Config, baseline: Baseline): SignalPip
           policy = { ...normal, d1Ms: 0, d2Ms: cfg.budgets.escalateMs }
         }
         lastPolicy = policy
+      } else if (assumedZone !== null) {
+        const b = cfg.budgets
+        lastPolicy = { offRoad: true, turningInto: false, d1Ms: b.blindSpotMs, d2Ms: b.blindSpotMs + b.escalateMs, countsTowardShare: false }
       }
       // Face lost: keep the last zone's budget; the state machine decides how to carry the time.
       const offRoad = zone === null ? null : lastPolicy.offRoad
@@ -201,6 +246,8 @@ export function createSignalPipeline(cfg: Config, baseline: Baseline): SignalPip
           armedD,
           armedL,
           ...(zone !== null && { zone }),
+          ...(assumedZone !== null && { zone: assumedZone, assumeOffRoad: true }),
+          ...(lossKind === 'drop' && { assumeClosed: true }),
           offRoadD1Ms: lastPolicy.d1Ms,
           offRoadD2Ms: lastPolicy.d2Ms,
           countsTowardShare: lastPolicy.countsTowardShare,

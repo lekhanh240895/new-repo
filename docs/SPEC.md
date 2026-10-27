@@ -281,6 +281,12 @@ All numbers live in `core/config.ts`. They are **starting defaults** to tune wit
 > 2.0 s; side/mirror looks 3.5 s at 10–30 km/h; no distraction alarms below 10 km/h; looking
 > into a turn allowed for 4 s. Mirrors, rear-view and speedometer do not count toward the 30 s
 > total. The table below is the original v0.1 rule, kept for reference.
+>
+> **Updated in P3:** the continuous timer is replaced by a 2 s **attention buffer** (AttenD):
+> it drains while off road, refills after 0.1 s on the road; empty → D1, empty 1.5 s more → D2.
+> Zone budgets above 2 s are a grace period per glance; each new zone starts a new one. Only
+> lap/console looks count toward the 30 s total. If the face is lost right after a fast head
+> drop, the eyes count as closed; after a fast turn, it is a blind-spot check (1.5 s, then D1).
 
 | Event | Rule |
 | --- | --- |

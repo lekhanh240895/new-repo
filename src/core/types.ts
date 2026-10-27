@@ -112,6 +112,10 @@ export interface FrameSignals {
   offRoadD2Ms?: number;
   /** Whether this look counts toward the "time off road within 30 s" total. Default: true. */
   countsTowardShare?: boolean;
+  /** Face lost right after the head dropped fast: treat as eyes closed (T15). */
+  assumeClosed?: boolean;
+  /** Face lost right after the head turned fast to the side: treat as off road (T15). */
+  assumeOffRoad?: boolean;
 }
 
 /** Where the driver looks (combined head + eyes), relative to the calibrated road ahead. */

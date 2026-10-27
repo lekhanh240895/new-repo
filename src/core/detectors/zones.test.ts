@@ -114,11 +114,11 @@ describe('zone budgets', () => {
     expect(policy('console', 25, 'slow').d1Ms).toBe(2000)
   })
 
-  it('driving looks do not count toward the 30 s total; phone and side looks do', () => {
+  it('only phone-like looks count toward the 30 s total (A17)', () => {
     expect(policy('mirrorLeft', -45).countsTowardShare).toBe(false)
     expect(policy('cluster').countsTowardShare).toBe(false)
     expect(policy('lap').countsTowardShare).toBe(true)
-    expect(policy('sideRight', 40).countsTowardShare).toBe(true)
+    expect(policy('sideRight', 40).countsTowardShare).toBe(false)
   })
 
   it('looking into a turn is driving; looking against it is not (T2)', () => {
