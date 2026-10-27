@@ -13,6 +13,8 @@ import { createSignalPipeline, eyeOpenness } from './pipeline.ts'
 const cfg = DEFAULT_CONFIG
 /** Raw pitch for a head tilted `deg` degrees down, whatever the config sign is. */
 const down = (deg: number) => deg * cfg.pose.headDownSign
+/** Raw yaw for a head turned `deg` degrees to the right, whatever the config sign is. */
+const right = (deg: number) => deg * cfg.pose.yawRightSign
 const BASE: Baseline = { ...DEFAULT_BASELINE, earOpen: 0.3, earClosed: 0.06, approximate: false }
 const ctx = { armed: true, alarmActive: false }
 
@@ -132,8 +134,8 @@ describe('end to end: camera numbers → alerts', () => {
   })
 
   it('mirror check (1.5 s) is ignored; a 4 s look away alarms', () => {
-    expect(drive([{ ms: 1000 }, { ms: 1500, spec: { yaw: 45 } }, { ms: 3000 }]).effects).toEqual([])
-    expect(drive([{ ms: 1000 }, { ms: 4000, spec: { yaw: 45 } }, { ms: 3000 }]).effects).toEqual([
+    expect(drive([{ ms: 1000 }, { ms: 1500, spec: { yaw: right(45) } }, { ms: 3000 }]).effects).toEqual([])
+    expect(drive([{ ms: 1000 }, { ms: 4000, spec: { yaw: right(45) } }, { ms: 3000 }]).effects).toEqual([
       'alarm:D1',
       'alarm:D2',
       'alarmStop',

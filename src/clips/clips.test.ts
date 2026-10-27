@@ -127,9 +127,10 @@ describe('sign check from a short clip', () => {
   })
 
   it('recommends the flipped value when this phone reports the other way', () => {
-    const flipped = { ...DEFAULT_CONFIG, pose: { ...DEFAULT_CONFIG.pose, yawRightSign: -1 as const } }
+    const sign = DEFAULT_CONFIG.pose.yawRightSign
+    const flipped = { ...DEFAULT_CONFIG, pose: { ...DEFAULT_CONFIG.pose, yawRightSign: -sign as 1 | -1 } }
     const yaw = signCheck(clip, windows, flipped).find((x) => x.setting === 'pose.yawRightSign')
-    expect(yaw).toMatchObject({ current: -1, recommended: 1, ok: false })
+    expect(yaw).toMatchObject({ current: -sign, recommended: sign, ok: false })
   })
 
   it('says "cannot tell" when a movement is missing or too small', () => {

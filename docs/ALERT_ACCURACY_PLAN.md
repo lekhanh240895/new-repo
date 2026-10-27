@@ -409,6 +409,17 @@ Recording list and instructions: [P7_RECORDING_GUIDE.md](P7_RECORDING_GUIDE.md).
   closure (the iris/blendshape consensus already ensures this); (2) behind glasses the iris
   barely moves, so the down-gaze lid correction (T8) gets about half strength; (3) C01/B01/B05
   must be recorded with the camera at dash height (guide updated).
+- Re-recorded sitting up (camera below the eyes): C01 drops from 5 false alarms to 1, and the
+  real closure alarms in 0.8 s. The one left is a 1.0 s glance with the head dipping 12° and the
+  lids fully covering the eyes (openness 0.15–0.26, the same as the closure): not fixable
+  without delaying real microsleeps. B01: the head went down only 7° and the iris barely moves
+  behind glasses, so the phone look reads as "half-closed eyes ahead" (no D, no false L).
+  To re-record with a natural head tilt.
+- SIGNS: turning right reads **−15° yaw** before the face is lost (the picture also gets much
+  brighter then: the camera or the light changed), and the head drifts −3 to −5° with the eyes
+  looking right. Iris x is also negative to the right, so the subject's right is the image's
+  left for both: `pose.yawRightSign` is now **−1** (it was a guess, +1). Scenarios and the
+  real-model trip replay are unchanged.
 
 ## 5. Safety rules for every change
 

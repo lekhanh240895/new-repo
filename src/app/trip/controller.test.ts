@@ -14,6 +14,8 @@ import type { EngineOptions } from '../../vision/engine.ts'
 import { createTripController, type TripDeps } from './controller.ts'
 
 const SETUP_MS = 4000
+/** Raw yaw for a head turned `deg` degrees to the right, whatever the config sign is. */
+const right = (deg: number) => deg * DEFAULT_CONFIG.pose.yawRightSign
 
 type Spec = FrameSpec & { inferMs?: number; luma?: number; area?: number }
 
@@ -490,11 +492,11 @@ describe('trip controller: P2 context (speed, motion, mount)', () => {
     const h = harness()
     await toMonitoring(h)
     h.setTurn(25)
-    await h.run(2500, { yaw: 45 })
+    await h.run(2500, { yaw: right(45) })
     expect(h.calls.some((c) => c.startsWith('alarm:D'))).toBe(false)
     await h.run(2000)
     h.setTurn(0)
-    await h.run(2500, { yaw: 45 })
+    await h.run(2500, { yaw: right(45) })
     expect(h.calls.some((c) => c.startsWith('alarm:D'))).toBe(true)
   })
 

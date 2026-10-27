@@ -313,8 +313,10 @@ export interface PoseConfig {
    */
   headDownSign: 1 | -1;
   /**
-   * `(yaw − baseline) × yawRightSign > 0` means "head turned right". +1 is an
-   * assumption, like headDownSign: confirm in Debug mode by turning right.
+   * `(yaw − baseline) × yawRightSign > 0` means "head turned right".
+   * −1: MediaPipe yaw goes negative when the head turns to the driver's right,
+   * like the iris x (gazeXRightSign). Measured on a real clip (P7 SIGNS: −15°
+   * at the start of a right turn, −3 to −5° drift with the eyes looking right).
    */
   yawRightSign: 1 | -1;
   /**
@@ -569,7 +571,7 @@ export const DEFAULT_CONFIG: Readonly<Config> = Object.freeze<Config>({
   },
   pose: {
     headDownSign: 1,
-    yawRightSign: 1,
+    yawRightSign: -1,
     gazeXRightSign: -1,
     levelDeg: 5,
   },
