@@ -66,6 +66,15 @@ export interface MonitoringState {
   /** Off-road time per frame inside the sliding window. */
   offRoadLog: readonly { t: number; dt: number }[];
   recoveredSince: number | null;
+  /** One short driving glance is allowed during recovery (F03): when it started, and whether it was used. */
+  recoveryGlanceSince: number | null;
+  recoveryGlanceUsed: boolean;
+  /** Eyes clearly open during an L2/L3 alarm since (F02). */
+  stepDownSince: number | null;
+  /** Highest level of the current alarm episode: decides "take a break" after a step down. */
+  peak: AlarmLevel | null;
+  /** Eyes on the phone while stopped since (B05 green light). */
+  parkedPhoneSince: number | null;
   /** When the camera stopped seeing the driver. */
   blindSince: number | null;
   lastMonitoringOffChimeAt: number | null;

@@ -302,3 +302,63 @@ describe('P4: expressions and drowsy eyes', () => {
     expect(effectNames(r.effects)).toEqual([])
   })
 })
+
+describe('P5: alarm behavior (T10)', () => {
+  const open = { eyesOpen: true }
+
+  it('a distraction alarm stops after 1 s back on the road (F01)', () => {
+    const r = runTrace([OPEN, away(2300), ahead(2000)])
+    expect(effectNames(r.effects)).toEqual(['alarm:D1', 'alarmStop'])
+    near(firstTimeOf(r, 'alarmStop'), 2000 + 2300 + 1000)
+  })
+
+  it('a microsleep alarm still needs 2 s', () => {
+    const r = runTrace([OPEN, closed(1200), { ms: 3000, with: open }])
+    near(firstTimeOf(r, 'alarmStop'), 2000 + 1200 + 2000)
+  })
+
+  it('L3 steps down to L1 when the eyes are clearly open for 1 s, even off the road (F02)', () => {
+    const atPhone = { ms: 3000, with: { eyesOpen: true, offRoad: true, recovered: false, countsTowardShare: false, offRoadD1Ms: 9000, offRoadD2Ms: 10_000 } }
+    const r = runTrace([OPEN, closed(2300), atPhone])
+    expect(effectNames(r.effects)).toEqual(['alarm:L1', 'alarm:L2', 'alarm:L3', 'alarm:L1'])
+    near(r.effects[3]?.t, 2000 + 2300 + 1000)
+  })
+
+  it('"take a break" still follows an L3 that was stepped down', () => {
+    const r = runTrace([OPEN, closed(2300), { ms: 4000, with: open }])
+    expect(effectNames(r.effects)).toEqual(['alarm:L1', 'alarm:L2', 'alarm:L3', 'alarm:L1', 'alarmStop', 'speak:takeBreak'])
+  })
+
+  it('one short mirror glance during recovery does not restart it (F03)', () => {
+    const mirror = (ms: number) => ({ ms, with: { eyesOpen: true, offRoad: true, recovered: false, countsTowardShare: false, offRoadD1Ms: 2500, offRoadD2Ms: 4000 } })
+    const r = runTrace([OPEN, closed(1200), { ms: 1000, with: open }, mirror(600), { ms: 3000, with: open }])
+    // The glance time still counts: stop 2 s after the eyes opened, as if there was no glance.
+    near(firstTimeOf(r, 'alarmStop'), 2000 + 1200 + 2000)
+  })
+
+  it('a long glance, a second glance, or a phone look does restart it', () => {
+    const glance = (ms: number, share = false) => ({ ms, with: { eyesOpen: true, offRoad: true, recovered: false, countsTowardShare: share, offRoadD1Ms: 2500, offRoadD2Ms: 4000 } })
+    const long = runTrace([OPEN, closed(1200), { ms: 500, with: open }, glance(1200), { ms: 3000, with: open }])
+    near(firstTimeOf(long, 'alarmStop'), 2000 + 1200 + 500 + 1200 + 2000)
+    const twice = runTrace([OPEN, closed(1200), { ms: 500, with: open }, glance(500), { ms: 300, with: open }, glance(500), { ms: 3000, with: open }])
+    near(firstTimeOf(twice, 'alarmStop'), 2000 + 1200 + 500 + 500 + 300 + 500 + 2000)
+    const phone = runTrace([OPEN, closed(1200), { ms: 500, with: open }, glance(500, true), { ms: 3000, with: open }])
+    near(firstTimeOf(phone, 'alarmStop'), 2000 + 1200 + 500 + 500 + 2000)
+  })
+
+  it('green light: phone while stopped, the car moves with the eyes still down → D1 at once (B05)', () => {
+    const phone = { offRoad: true, countsTowardShare: true }
+    const r = runTrace([OPEN, { ms: 5000, with: { ...phone, armedD: false, armedL: false } }, { ms: 1000, with: { ...phone, armedD: false, armedL: true } }])
+    expect(effectNames(r.effects)).toEqual(['alarm:D1'])
+    near(firstTimeOf(r, 'alarm:D1'), 2000 + 5000)
+  })
+
+  it('green light: no alarm if the eyes came back up before moving, or for a side look', () => {
+    const phone = { offRoad: true, countsTowardShare: true }
+    const up = runTrace([OPEN, { ms: 5000, with: { ...phone, armedD: false, armedL: false } }, { ms: 300, with: { armedD: false, armedL: false } }, { ms: 1000, with: { armedD: false, armedL: true } }])
+    expect(effectNames(up.effects)).toEqual([])
+    const side = { offRoad: true, countsTowardShare: false }
+    const left = runTrace([OPEN, { ms: 5000, with: { ...side, armedD: false, armedL: false } }, { ms: 1000, with: { ...side, armedD: false, armedL: true } }])
+    expect(effectNames(left.effects)).toEqual([])
+  })
+})

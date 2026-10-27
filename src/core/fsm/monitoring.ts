@@ -46,6 +46,11 @@ export function createMonitoringState(): MonitoringState {
     emptySince: null,
     offRoadLog: [],
     recoveredSince: null,
+    recoveryGlanceSince: null,
+    recoveryGlanceUsed: false,
+    stepDownSince: null,
+    peak: null,
+    parkedPhoneSince: null,
     blindSince: null,
     lastMonitoringOffChimeAt: null,
     latched: null,
@@ -230,11 +235,23 @@ export function stepMonitoring(
   }
   const emptySince = offNow && buffer <= 0 ? (m.emptySince ?? t) : null
 
-  let dist: AlarmLevel | null = null
+  // Green light (B05): the phone held the eyes while stopped, and the car moves off with the
+  // eyes still on it. Only phone-like looks (lap, console), never a side look into traffic.
+  const phoneLook = rawOff === true && countsTowardShare
+  let parkedPhoneSince: number | null = null
+  let greenLight = false
+  if (!armedL) {
+    parkedPhoneSince = phoneLook ? (m.parkedPhoneSince ?? t) : null
+  } else if (m.parkedPhoneSince !== null && phoneLook && (m.lastT ?? t) - m.parkedPhoneSince >= cfg.alert.greenLightAfterMs) {
+    greenLight = true
+    buffer = 0
+  }
+
+  let dist: AlarmLevel | null = greenLight ? 'D1' : null
   if (offNow && ((emptySince !== null && t - emptySince >= d2Ms - d1Ms) || (countsTowardShare && offTotalMs > cfg.offRoad.windowTotalMs))) {
     dist = 'D2'
   } else if (emptySince !== null) {
-    dist = 'D1'
+    dist = maxAlarm(dist, 'D1')
   }
 
   // --- Latch, escalate, recover ---
@@ -242,19 +259,50 @@ export function stepMonitoring(
   const alarms = { ...m.stats.alarms }
   if (latched !== null && alertRank(latched) > alertRank(m.latched)) alarms[latched] += 1
 
+  // Microsleep alarm, but the eyes are clearly open again (maybe looking at the phone to see
+  // why it beeps): step the siren down to L1 instead of keeping it at full volume (F02).
+  let stepDownSince: number | null = null
+  if ((latched === 'L2' || latched === 'L3') && s.eyesOpen === true && !closedNow && !blind) {
+    stepDownSince = m.stepDownSince ?? t
+    if (t - stepDownSince >= cfg.alert.stepDownAfterMs) {
+      latched = 'L1'
+      stepDownSince = null
+    }
+  }
+  let peak = latched === null ? null : maxAlarm(m.peak, latched)
+
   let recoveredSince: number | null = null
+  let recoveryGlanceSince: number | null = null
+  let recoveryGlanceUsed = false
   let postAlarmAdvisoryUntil = m.postAlarmAdvisoryUntil
   let lastAdvisorySpokenAt = m.lastAdvisorySpokenAt
   if (latched !== null) {
     const ok = s.recovered && !blind && !closedNow && !offNow && !drowsy
-    recoveredSince = ok ? (m.recoveredSince ?? t) : null
-    if (recoveredSince !== null && t - recoveredSince >= cfg.alert.recoveryMs) {
-      const after = afterAlarmCleared(m, latched, t, cfg)
+    // One short look at a mirror or the speedometer does not restart recovery (F03).
+    const drivingGlance =
+      !ok && !blind && !closedNow && !drowsy && s.eyesOpen === true && offNow && s.countsTowardShare === false
+    recoveryGlanceUsed = m.recoveryGlanceUsed
+    if (ok) {
+      recoveredSince = m.recoveredSince ?? t
+    } else if (drivingGlance && m.recoveredSince !== null && (!m.recoveryGlanceUsed || m.recoveryGlanceSince !== null)) {
+      recoveryGlanceSince = m.recoveryGlanceSince ?? t
+      recoveryGlanceUsed = true
+      recoveredSince = t - recoveryGlanceSince <= cfg.alert.recoveryGlanceMs ? m.recoveredSince : null
+    }
+    if (recoveredSince === null) {
+      recoveryGlanceUsed = false
+      recoveryGlanceSince = null
+    }
+    const recoveryMs = isDistraction(latched) ? cfg.alert.distractionRecoveryMs : cfg.alert.recoveryMs
+    if (ok && recoveredSince !== null && t - recoveredSince >= recoveryMs) {
+      const after = afterAlarmCleared(m, peak ?? latched, t, cfg)
       postAlarmAdvisoryUntil = after.postAlarmAdvisoryUntil
       lastAdvisorySpokenAt = after.lastAdvisorySpokenAt
       if (after.speak) speechEffects.push({ type: 'speak', message: 'takeBreak' })
       latched = null
+      peak = null
       recoveredSince = null
+      recoveryGlanceUsed = false
     }
   }
 
@@ -327,6 +375,11 @@ export function stepMonitoring(
       emptySince,
       offRoadLog,
       recoveredSince,
+      recoveryGlanceSince,
+      recoveryGlanceUsed,
+      stepDownSince,
+      peak,
+      parkedPhoneSince,
       blindSince,
       lastMonitoringOffChimeAt,
       latched,
@@ -355,14 +408,18 @@ export function acknowledgeAwake(
   cfg: Config,
 ): Transition<MonitoringState> {
   if (m.latched === null) return { state: m, effects: [] }
-  const after = afterAlarmCleared(m, m.latched, t, cfg)
+  const after = afterAlarmCleared(m, m.peak ?? m.latched, t, cfg)
   const effects: Effect[] = [{ type: 'alarmStop' }]
   if (after.speak) effects.push({ type: 'speak', message: 'takeBreak' })
   return {
     state: {
       ...m,
       latched: null,
+      peak: null,
       recoveredSince: null,
+      recoveryGlanceSince: null,
+      recoveryGlanceUsed: false,
+      stepDownSince: null,
       alert: advisoryFor(m.fatigue),
       postAlarmAdvisoryUntil: after.postAlarmAdvisoryUntil,
       lastAdvisorySpokenAt: after.lastAdvisorySpokenAt,

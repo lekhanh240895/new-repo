@@ -326,6 +326,13 @@ Note: "eyes down ≥ 2 s" is labeled "eyes off road", **not** "phone use". It ca
 
 ## 11. Alert design
 
+> **Updated in P5** (docs/ALERT_ACCURACY_PLAN.md, T10): distraction alarms stop after **1 s**
+> back on the road (microsleep alarms still 2 s). L2/L3 step down to L1 once the eyes are
+> clearly open for 1 s, wherever the driver looks; "take a break" still follows. One driving
+> glance (mirror, speedometer) of up to 1 s during recovery does not restart the count. Green
+> light: eyes on the phone ≥ 2 s while stopped, then the car moves with the eyes still on it →
+> D1 at once. No rate limit on D1: it would mute a real distraction alarm.
+
 | Level | Trigger | Visual | Audio | Haptic (Android) |
 | --- | --- | --- | --- | --- |
 | Advisory | Fatigue ADVISORY | Dot slowly changes green → amber | Short calm voice: "Signs of fatigue. Plan a break." Max once per 10 min | none |

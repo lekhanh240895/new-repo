@@ -319,6 +319,7 @@ export function createSignalPipeline(cfg: Config, baseline: Baseline): SignalPip
           ...(lossKind === 'drop' && { assumeClosed: true }),
           ...(expression && { expression }),
           ...(drowsyEyes !== null && { drowsyEyes }),
+          ...(usable && openness !== null && openness > cfg.eye.openAbove && { eyesOpen: true }),
           offRoadD1Ms: lastPolicy.d1Ms,
           offRoadD2Ms: lastPolicy.d2Ms,
           countsTowardShare: lastPolicy.countsTowardShare,

@@ -278,6 +278,20 @@ export interface DegradedConfig {
 export interface AlertConfig {
   /** Eyes open and pose OK continuously for this long stops an alarm. */
   recoveryMs: number;
+  /**
+   * Distraction alarms stop sooner (F01): the driver who looks at the phone to
+   * see why it beeps should not be kept in a loop.
+   */
+  distractionRecoveryMs: number;
+  /** One driving glance (mirror, speedometer) up to this long does not restart recovery (F03). */
+  recoveryGlanceMs: number;
+  /** L2/L3 with the eyes clearly open for this long steps down to L1 (F02). */
+  stepDownAfterMs: number;
+  /**
+   * Green light (B05): eyes on the phone for at least this long while stopped,
+   * then the car moves with the eyes still down → D1 at once.
+   */
+  greenLightAfterMs: number;
   recoveryPoseDeg: number;
   /** Not seeing the driver for this long triggers the "monitoring off" chime. */
   monitoringOffAfterMs: number;
@@ -463,6 +477,10 @@ export const DEFAULT_CONFIG: Readonly<Config> = Object.freeze<Config>({
   },
   alert: {
     recoveryMs: 2.0 * SECOND,
+    distractionRecoveryMs: 1.0 * SECOND,
+    recoveryGlanceMs: 1.0 * SECOND,
+    stepDownAfterMs: 1.0 * SECOND,
+    greenLightAfterMs: 2.0 * SECOND,
     recoveryPoseDeg: 15,
     monitoringOffAfterMs: 10 * SECOND,
     monitoringOffRepeatMs: 60 * SECOND,

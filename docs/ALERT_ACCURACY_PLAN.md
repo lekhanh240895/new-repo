@@ -312,7 +312,30 @@ To confirm with real clips (P7): smile/mouth levels while laughing, sneezing and
 low the lids go on a real speedometer glance; heavy-lid and stare levels on a tired driver;
 what the iris does under closed lids.
 
-Still failing, by phase: P5 — B05, F01–F03.
+Still failing after P4: P5 — B05, F01–F03.
+
+### P5 results (alarm behavior)
+
+**94 pass, 0 fail, 8 need a real clip** (was 90 / 4 / 8). **4 improved (B05, F01, F02, F03),
+0 regressed.** Every synthetic case passes now.
+
+What changed:
+- **Green light (B05):** eyes on the phone (lap / console) for ≥ 2 s while stopped, then the
+  car starts moving with the eyes still there → D1 at once, then D2 1.5 s later if still down.
+  Only phone-like looks: a side look into traffic while pulling out stays quiet.
+- **Short distraction recovery (F01):** a D alarm stops after 1 s back on the road (was 2 s),
+  so looking at the phone to see why it beeps does not keep the alarm going.
+- **Step down (F02):** L2/L3 with the eyes clearly open for 1 s → L1 (soft), even if the
+  driver is not yet looking at the road. "Take a break" still comes after, based on the
+  highest level of the episode.
+- **Recovery glance (F03):** one mirror or speedometer glance of up to 1 s during recovery
+  does not restart the count (and its time counts). A longer glance, a second glance, or a
+  phone look does restart it.
+- **Not done on purpose:** a rate limit on D1 beeps. F09 (mirror looks every 15 s) already
+  stays within budget, and muting a D1 would hide a real distraction.
+
+Real-model replay: L1 → L2 → L3, then L1 about 1 s after the eyes open, then stop + "take a
+break".
 
 ## 5. Safety rules for every change
 

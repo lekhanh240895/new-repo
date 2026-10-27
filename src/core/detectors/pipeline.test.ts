@@ -120,9 +120,9 @@ describe('end to end: camera numbers → alerts', () => {
     expect(drive(segs).effects).toEqual([])
   })
 
-  it('microsleep: eyes closed 2.2 s → L1, L2, L3, then stop + break prompt', () => {
+  it('microsleep: eyes closed 2.2 s → L1, L2, L3, steps down to L1 once awake, then stop + break prompt', () => {
     const { effects } = drive([{ ms: 2000 }, { ms: 2200, spec: closed }, { ms: 3000 }])
-    expect(effects).toEqual(['alarm:L1', 'alarm:L2', 'alarm:L3', 'alarmStop', 'speak:takeBreak'])
+    expect(effects).toEqual(['alarm:L1', 'alarm:L2', 'alarm:L3', 'alarm:L1', 'alarmStop', 'speak:takeBreak'])
   })
 
   it('narrow eyes are not "closed" once calibrated', () => {

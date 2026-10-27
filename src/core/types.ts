@@ -105,6 +105,8 @@ export interface FrameSignals {
   expression?: boolean;
   /** Drowsy eyes that are not closed: heavy lids, a sinking stare, or repeated near-microsleeps. */
   drowsyEyes?: 'heavy' | 'stare' | 'nearMiss';
+  /** Eyes clearly open (wherever the driver looks). Used to step an alarm down (F02). */
+  eyesOpen?: boolean;
   fatigue: FatigueLevel;
   /** False when the car is known to be stopped (SPEC §10.6). */
   armed: boolean;

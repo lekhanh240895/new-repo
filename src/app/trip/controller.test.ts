@@ -206,6 +206,8 @@ describe('trip controller: happy path', () => {
     const after = h.calls.slice(before).filter((c) => /^(alarm|vibrate|speak)/.test(c))
     expect(after).toEqual([
       'alarm:L1', 'vibrate:L1', 'alarm:L2', 'vibrate:L2', 'alarm:L3', 'vibrate:L3',
+      // Eyes open again: the siren steps down to L1 (F02), then stops after recovery.
+      'alarm:L1', 'vibrate:L1',
       'alarmStop', 'vibrate:stop', 'speak:takeBreak',
     ])
   })

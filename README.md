@@ -114,7 +114,8 @@ passing. After a fix, record the new passes with `npm run scenarios -- --update-
 
 Progress: v0.1 passed 40 scenarios; after P2 (speed context, motion sensors, gaze zones) **66**;
 after P3 (attention buffer, scanning, face-lost context) **72**; after P4 (eye-closure
-robustness, drowsy eyes, clean fatigue signals) **90** of 102.
+robustness, drowsy eyes, clean fatigue signals) **90**; after P5 (alarm behavior) **94** of 102
+— every synthetic case. The other 8 need real recorded clips (P7).
 
 ### Project layout
 
@@ -153,8 +154,8 @@ New versions are never applied in the middle of a trip: the start screen offers 
 | **M1** ✅ | Camera, vision worker + fallback, signals, quality gates, Debug mode, replay harness |
 | **M2** ✅ | Calibration, detectors, alerts (sound, voice, vibration), Wake Lock, watchdog, trip controller |
 | **M3** ✅ | Dark Cockpit UI, onboarding, Vietnamese, offline PWA, CSP, battery + pause notification — **v0.1.0** |
-| **P1–P4** ✅ | Alert accuracy: 102-case scenario library + ratchet; speed context, motion sensors, gaze zones, hysteresis; attention buffer, face-lost context; robust eye closure, drowsy eyes, clean fatigue signals |
-| Next | P5 alarm behavior · P6 tuning · P7 real clips · real-device checks |
+| **P1–P5** ✅ | Alert accuracy: 102-case scenario library + ratchet; speed context, motion sensors, gaze zones, hysteresis; attention buffer, face-lost context; robust eye closure, drowsy eyes, clean fatigue signals; smarter alarm behavior |
+| Next | P6 tuning + boundary cases · P7 real clips · real-device checks |
 
 ## License
 
