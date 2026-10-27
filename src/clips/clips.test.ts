@@ -137,4 +137,9 @@ describe('sign check from a short clip', () => {
     expect(r.find((x) => x.setting === 'pose.yawRightSign')?.ok).toBeNull()
     expect(r.find((x) => x.setting === 'pose.headDownSign')?.measured).toBe('not recorded')
   })
+
+  it('says why a movement was not recorded: the face was lost', () => {
+    const r = signCheck(recording([[3, {}], [3, { face: false }]]), { straight: [0, 3], headRight: [3, 6] })
+    expect(r.find((x) => x.setting === 'pose.yawRightSign')?.measured).toBe('not recorded (face lost in 100% of 3–6 s)')
+  })
 })

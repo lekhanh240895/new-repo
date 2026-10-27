@@ -109,9 +109,17 @@ export function signCheck(samples: readonly FrameResult[], w: SignWindows, cfg: 
     const b = med(win, pick)
     return a === null || b === null ? null : b - a
   }
-  const finding = (setting: string, d: number | null, min: number, current: number, unit: string): SignFinding => {
+  // Why a window has no value: no frames at all, or frames without a face (turned too far, out of frame).
+  const missing = (win: [number, number] | undefined) => {
+    if (win === undefined) return 'not recorded'
+    const all = samples.filter((f) => (f.t - t0) / 1000 >= win[0] && (f.t - t0) / 1000 < win[1])
+    if (all.length === 0) return `not recorded (no frames in ${win[0]}–${win[1]} s)`
+    const lost = all.filter((f) => !f.faceFound).length
+    return `not recorded (face lost in ${Math.round((lost / all.length) * 100)}% of ${win[0]}–${win[1]} s)`
+  }
+  const finding = (setting: string, d: number | null, min: number, current: number, unit: string, win?: [number, number]): SignFinding => {
     if (d === null || Math.abs(d) < min) {
-      return { setting, measured: d === null ? 'not recorded' : `${d.toFixed(2)}${unit} (too small)`, current, recommended: null, ok: null }
+      return { setting, measured: d === null ? missing(inWin(w.straight).length === 0 ? w.straight : win) : `${d.toFixed(2)}${unit} (too small)`, current, recommended: null, ok: null }
     }
     const recommended = Math.sign(d)
     return { setting, measured: `${d > 0 ? '+' : ''}${d.toFixed(2)}${unit}`, current, recommended, ok: recommended === current }
@@ -119,11 +127,11 @@ export function signCheck(samples: readonly FrameResult[], w: SignWindows, cfg: 
 
   const out: SignFinding[] = [
     // downDeg = (pitch − baseline) × headDownSign must be > 0 when the head goes down.
-    finding('pose.headDownSign', delta(w.headDown, (f) => f.pose?.pitchDeg), 8, cfg.pose.headDownSign, '° pitch'),
+    finding('pose.headDownSign', delta(w.headDown, (f) => f.pose?.pitchDeg), 8, cfg.pose.headDownSign, '° pitch', w.headDown),
     // yawDeg = (yaw − baseline) × yawRightSign must be > 0 when the head turns right.
-    finding('pose.yawRightSign', delta(w.headRight, (f) => f.pose?.yawDeg), 10, cfg.pose.yawRightSign, '° yaw'),
+    finding('pose.yawRightSign', delta(w.headRight, (f) => f.pose?.yawDeg), 10, cfg.pose.yawRightSign, '° yaw', w.headRight),
     // Eyes right: gaze.x × gazeXRightSign must be > 0.
-    finding('pose.gazeXRightSign', delta(w.eyesRight, (f) => f.gaze?.x), 0.1, cfg.pose.gazeXRightSign, ' iris x'),
+    finding('pose.gazeXRightSign', delta(w.eyesRight, (f) => f.gaze?.x), 0.1, cfg.pose.gazeXRightSign, ' iris x', w.eyesRight),
   ]
   // The blendshape opinion must move the same way as the iris, or the consensus (T3) cancels it.
   const irisX = delta(w.eyesRight, (f) => f.gaze?.x)
@@ -135,7 +143,7 @@ export function signCheck(samples: readonly FrameResult[], w: SignWindows, cfg: 
   for (const [name, pick] of [['iris y when looking down', (f: FrameResult) => f.gaze?.y], ['blendshape lookY when looking down', (f: FrameResult) => f.eye?.lookY]] as const) {
     const d = delta(w.eyesDown, pick)
     out.push(d === null || Math.abs(d) < 0.1
-      ? { setting: name, measured: d === null ? 'not recorded' : `${d.toFixed(2)} (too small)`, current: -1, recommended: null, ok: null }
+      ? { setting: name, measured: d === null ? missing(w.eyesDown) : `${d.toFixed(2)} (too small)`, current: -1, recommended: null, ok: null }
       : { setting: name, measured: d.toFixed(2), current: -1, recommended: Math.sign(d), ok: d < 0 })
   }
   return out
