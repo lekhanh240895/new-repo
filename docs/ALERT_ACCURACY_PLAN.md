@@ -366,7 +366,7 @@ mirror, rear-view and slow-side budgets, the lap / speedometer budgets and L1. T
 first to check with real clips (P7). A wide safe range does not prove a value is right; it
 only means no scripted case is near it.
 
-### P7 status (real clips) — kit ready, waiting for recordings
+### P7 status (real clips) — first round done
 
 P7 needs clips of a real face, recorded by you (parked or at a desk, never while driving).
 Built so far:
@@ -419,9 +419,24 @@ Recording list and instructions: [P7_RECORDING_GUIDE.md](P7_RECORDING_GUIDE.md).
   −5° with the eyes looking right. (The luma jump while the face is lost is not a light change:
   without a face, `faceLuma` is the whole frame.) The model loses this face (glasses) in the
   middle of every right turn, so the sign check now also reads the frames at the edges of the
-  turn: −39.8°, which confirms the new sign. Iris x is also negative to the right, so the subject's right is the image's
-  left for both: `pose.yawRightSign` is now **−1** (it was a guess, +1). Scenarios and the
-  real-model trip replay are unchanged.
+  turn: −39.8°, which confirms the new sign. Iris x is also negative to the right, so the
+  subject's right is the image's left for both: `pose.yawRightSign` is now **−1** (it was a
+  guess, +1). Scenarios and the real-model trip replay are unchanged.
+- B01 re-recorded: the head went down only 5–9° and the lids covered the eyes, so the phone
+  look reads like the real closure (openness 0.14–0.39, eyeBlink 0.46–0.70, lookY −0.5 to
+  −0.8). The only difference is the head angle (+5–12° looking down, ≈0° for an eyes-only
+  closure), but a driver who dozes off nods forward too.
+
+**Decision (P7):** keep the logic as it is (option A). Eyes that look closed for 1 s raise
+the L alarm, even when the cause is an eyes-down look with lids covering the eyes. A real
+microsleep, including a nod-off, keeps its 1 s alarm. The cost is a wrong message ("wake up"
+instead of "eyes on the road") on some long eyes-down looks. The alternative (closed eyes +
+head ≥5° down = looking down) would delay nod-off alarms by about 1 s, against safety rule 1.
+To revisit only with clips recorded in the car (parked, phone in its mount).
+
+**P7 result, all signs confirmed on a real face:** `headDownSign` +1 (was −1),
+`yawRightSign` −1 (was +1), `gazeXRightSign` −1 and the blendshape directions unchanged.
+R01 (real closure) alarms in 1.0 s with glasses.
 
 ## 5. Safety rules for every change
 
