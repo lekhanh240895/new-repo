@@ -125,11 +125,31 @@ export function signCheck(samples: readonly FrameResult[], w: SignWindows, cfg: 
     return { setting, measured: `${d > 0 ? '+' : ''}${d.toFixed(2)}${unit}`, current, recommended, ok: recommended === current }
   }
 
+  // The model often loses a face turned to the side (glasses, profile). Then the frames
+  // just before and after the loss still show which way the head went: use them if at
+  // least two of them moved past the threshold, all the same way.
+  const yawFinding = (): SignFinding => {
+    const setting = 'pose.yawRightSign'
+    const current = cfg.pose.yawRightSign
+    const d = delta(w.headRight, (f) => f.pose?.yawDeg)
+    const straight = med(w.straight, (f) => f.pose?.yawDeg)
+    if (d !== null || w.headRight === undefined || straight === null) return finding(setting, d, 10, current, '° yaw', w.headRight)
+    const edges = inWin([w.headRight[0] - 1.5, w.headRight[1] + 1.5]).flatMap((f) => {
+      const v = f.pose?.yawDeg
+      return v === undefined || Math.abs(v - straight) < 10 ? [] : [v - straight]
+    })
+    const signs = new Set(edges.map(Math.sign))
+    if (edges.length < 2 || signs.size !== 1) return finding(setting, null, 10, current, '° yaw', w.headRight)
+    const e = edges.reduce((a, b) => (Math.abs(b) > Math.abs(a) ? b : a))
+    const recommended = Math.sign(e)
+    return { setting, measured: `${e > 0 ? '+' : ''}${e.toFixed(2)}° yaw (edges of the turn, face lost in the middle)`, current, recommended, ok: recommended === current }
+  }
+
   const out: SignFinding[] = [
     // downDeg = (pitch − baseline) × headDownSign must be > 0 when the head goes down.
     finding('pose.headDownSign', delta(w.headDown, (f) => f.pose?.pitchDeg), 8, cfg.pose.headDownSign, '° pitch', w.headDown),
     // yawDeg = (yaw − baseline) × yawRightSign must be > 0 when the head turns right.
-    finding('pose.yawRightSign', delta(w.headRight, (f) => f.pose?.yawDeg), 10, cfg.pose.yawRightSign, '° yaw', w.headRight),
+    yawFinding(),
     // Eyes right: gaze.x × gazeXRightSign must be > 0.
     finding('pose.gazeXRightSign', delta(w.eyesRight, (f) => f.gaze?.x), 0.1, cfg.pose.gazeXRightSign, ' iris x', w.eyesRight),
   ]

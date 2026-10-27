@@ -139,6 +139,19 @@ describe('sign check from a short clip', () => {
     expect(r.find((x) => x.setting === 'pose.headDownSign')?.measured).toBe('not recorded')
   })
 
+  it('uses the edges of a turn when the face is lost in the middle', () => {
+    const turn = (deg: number) => ({ yaw: deg })
+    const r = signCheck(recording([[3, {}], [0.2, turn(15)], [2.6, { face: false }], [0.2, turn(14)], [3, {}]]), { straight: [0, 3], headRight: [3.5, 5.5] })
+    expect(r.find((x) => x.setting === 'pose.yawRightSign')).toMatchObject({ recommended: DEFAULT_CONFIG.pose.yawRightSign, ok: true })
+  })
+
+  it('edges that disagree, or only one frame, still say "cannot tell"', () => {
+    const one = signCheck(recording([[3, {}], [0.07, { yaw: 15 }], [2.9, { face: false }], [3, {}]]), { straight: [0, 3], headRight: [3.5, 5.5] })
+    expect(one.find((x) => x.setting === 'pose.yawRightSign')?.ok).toBeNull()
+    const mixed = signCheck(recording([[3, {}], [0.2, { yaw: 15 }], [2.6, { face: false }], [0.2, { yaw: -15 }], [3, {}]]), { straight: [0, 3], headRight: [3.5, 5.5] })
+    expect(mixed.find((x) => x.setting === 'pose.yawRightSign')?.ok).toBeNull()
+  })
+
   it('says why a movement was not recorded: the face was lost', () => {
     const r = signCheck(recording([[3, {}], [3, { face: false }]]), { straight: [0, 3], headRight: [3, 6] })
     expect(r.find((x) => x.setting === 'pose.yawRightSign')?.measured).toBe('not recorded (face lost in 100% of 3–6 s)')

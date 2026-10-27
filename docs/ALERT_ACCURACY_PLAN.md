@@ -415,9 +415,11 @@ Recording list and instructions: [P7_RECORDING_GUIDE.md](P7_RECORDING_GUIDE.md).
   without delaying real microsleeps. B01: the head went down only 7° and the iris barely moves
   behind glasses, so the phone look reads as "half-closed eyes ahead" (no D, no false L).
   To re-record with a natural head tilt.
-- SIGNS: turning right reads **−15° yaw** before the face is lost (the picture also gets much
-  brighter then: the camera or the light changed), and the head drifts −3 to −5° with the eyes
-  looking right. Iris x is also negative to the right, so the subject's right is the image's
+- SIGNS: turning right reads **−15° yaw** before the face is lost, and the head drifts −3 to
+  −5° with the eyes looking right. (The luma jump while the face is lost is not a light change:
+  without a face, `faceLuma` is the whole frame.) The model loses this face (glasses) in the
+  middle of every right turn, so the sign check now also reads the frames at the edges of the
+  turn: −39.8°, which confirms the new sign. Iris x is also negative to the right, so the subject's right is the image's
   left for both: `pose.yawRightSign` is now **−1** (it was a guess, +1). Scenarios and the
   real-model trip replay are unchanged.
 
