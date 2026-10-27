@@ -24,6 +24,7 @@ const en = {
   'idle.mount4': 'Keep the phone charging, and turn the screen brightness down.',
   'idle.location': 'Use location to stay quiet when the car is stopped',
   'idle.notify': 'Notify me if monitoring pauses',
+  'idle.motion': 'Use motion sensors to recognize turns and stops',
   'idle.start': 'Start trip',
   'idle.update': 'A new version is ready.',
   'idle.updateNow': 'Update now',
@@ -72,6 +73,7 @@ const en = {
   'cockpit.battery': 'Battery low — connect the charger.',
   'cockpit.notMonitoring': "Not monitoring: can't see your face.",
   'cockpit.end': 'Hold to end trip',
+  'cockpit.mountSide': 'The phone is far to the side. For better accuracy, move it toward the center.',
 
   'suspended': 'Monitoring paused. Come back to this app to continue.',
 
@@ -124,6 +126,7 @@ const vi: Record<TextKey, string> = {
   'idle.mount4': 'Cắm sạc điện thoại và giảm độ sáng màn hình.',
   'idle.location': 'Dùng vị trí để không báo động khi xe đang dừng',
   'idle.notify': 'Thông báo khi giám sát bị tạm dừng',
+  'idle.motion': 'Dùng cảm biến chuyển động để nhận biết khúc cua và lúc dừng xe',
   'idle.start': 'Bắt đầu chuyến đi',
   'idle.update': 'Đã có phiên bản mới.',
   'idle.updateNow': 'Cập nhật ngay',
@@ -172,6 +175,7 @@ const vi: Record<TextKey, string> = {
   'cockpit.battery': 'Pin yếu — hãy cắm sạc.',
   'cockpit.notMonitoring': 'Không giám sát được: không thấy khuôn mặt.',
   'cockpit.end': 'Giữ để kết thúc',
+  'cockpit.mountSide': 'Điện thoại gắn quá lệch sang bên. Để chính xác hơn, hãy dời về gần giữa.',
 
   'suspended': 'Đã tạm dừng giám sát. Hãy quay lại ứng dụng để tiếp tục.',
 

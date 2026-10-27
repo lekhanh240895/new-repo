@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type { AlarmLevel, Phase } from '../../core/fsm/types.ts'
+import { requestMotionPermission } from '../../platform/motion.ts'
 import { requestNotificationPermission } from '../../platform/notify.ts'
 import { useLang, type TextKey } from '../i18n.ts'
 import { installUpdate, usePwaState } from '../pwa.ts'
@@ -127,7 +128,9 @@ export function TripView() {
   const pwa = usePwaState()
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const [accepted, setAccepted] = useState(readAccepted)
-  const [useLocation, setUseLocation] = useState(false)
+  // Decisions 2 and 3: location and motion sensors are on by default (both stay on the phone).
+  const [useLocation, setUseLocation] = useState(true)
+  const [useMotion, setUseMotion] = useState(true)
   const [notify, setNotify] = useState(false)
   const { phase } = snap.session
   const alert = snap.session.monitoring.alert
@@ -150,8 +153,10 @@ export function TripView() {
     // All of this must happen inside the tap: full screen, audio, camera, notifications.
     void document.documentElement.requestFullscreen?.({ navigationUI: 'hide' }).catch(() => {})
     if (notify) void requestNotificationPermission()
+    if (useMotion) void requestMotionPermission()
     controller.start(video, {
       useLocation,
+      useMotion,
       notifyWhenPaused: notify,
       preferGpu: params.get('delegate') !== 'cpu',
       preferWorker: params.get('worker') !== '0',
@@ -199,6 +204,10 @@ export function TripView() {
           <label className="toggle">
             <input type="checkbox" checked={useLocation} onChange={(e) => setUseLocation(e.target.checked)} />
             {t('idle.location')}
+          </label>
+          <label className="toggle">
+            <input type="checkbox" checked={useMotion} onChange={(e) => setUseMotion(e.target.checked)} />
+            {t('idle.motion')}
           </label>
           <label className="toggle">
             <input type="checkbox" checked={notify} onChange={(e) => setNotify(e.target.checked)} />
@@ -253,6 +262,7 @@ export function TripView() {
           </div>
           <div className="cockpit-footer">
             {snap.calibration.approximate && <p className="cockpit-note small">{t('cockpit.approx')}</p>}
+            {snap.mountWarning && <p className="cockpit-note small">{t('cockpit.mountSide')}</p>}
             <HoldButton onHold={() => controller.endTrip()}>{t('cockpit.end')}</HoldButton>
           </div>
         </div>

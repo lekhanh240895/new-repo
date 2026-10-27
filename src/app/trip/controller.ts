@@ -6,6 +6,7 @@
  * faults — is tested in Node with fakes (controller.test.ts).
  */
 import { computeBaseline, fallbackBaseline, type Baseline, type CalibrationFailure } from '../../core/calibration/baseline.ts'
+import { mountTooFarToSide } from '../../core/calibration/mount.ts'
 import { DEFAULT_CONFIG, type Config } from '../../core/config.ts'
 import { createSignalPipeline, type SignalDebug, type SignalPipeline } from '../../core/detectors/pipeline.ts'
 import { createSession, hudStatus, reduce, type HudStatus } from '../../core/fsm/index.ts'
@@ -17,6 +18,7 @@ import type { AudioEngine, VoiceLang } from '../../platform/audio.ts'
 import { CameraError, type CameraHandle, type CameraOptions } from '../../platform/camera.ts'
 import type { ScreenWakeLock, VibrationKind } from '../../platform/device.ts'
 import type { FrameLoop, FrameLoopOptions } from '../../platform/frameLoop.ts'
+import type { MotionMonitor } from '../../platform/motion.ts'
 import type { SpeedMonitor } from '../../platform/speed.ts'
 import type { Watchdog } from '../../platform/watchdog.ts'
 import type { Backend, EngineOptions, VisionEngine } from '../../vision/engine.ts'
@@ -36,6 +38,8 @@ export interface TripDeps {
   watchBattery?(onChange: (state: BatteryState) => void): () => void;
   /** Optional: a system notification, because sound may not play while the page is hidden. */
   notify?(kind: 'paused'): void;
+  /** Optional: motion sensors (turn rate, "still"). Plan T2. */
+  startMotionMonitor?(): MotionMonitor;
 }
 
 export interface BatteryState {
@@ -54,6 +58,8 @@ export interface TripOptions {
   preferWorker?: boolean;
   /** Show a notification when monitoring pauses because the app was hidden (SPEC §12 F10). */
   notifyWhenPaused?: boolean;
+  /** Use the motion sensors to recognize turns and stops (decision 3: on by default). */
+  useMotion?: boolean;
 }
 
 export interface SetupStatus {
@@ -92,6 +98,8 @@ export interface TripSnapshot {
   faultGaveUp: boolean;
   /** Battery under 15% and not charging (SPEC §12 F18). */
   batteryLow: boolean;
+  /** Calibration shows the phone is mounted far to the side (plan A23). */
+  mountWarning: boolean;
   needsRecalibration: boolean;
   recalibrating: boolean;
   log: readonly string[];
@@ -143,6 +151,7 @@ export function initialTripSnapshot(cfg: Config = DEFAULT_CONFIG, s: SessionStat
     faultDetail: null,
     faultGaveUp: false,
     batteryLow: false,
+    mountWarning: false,
     needsRecalibration: false,
     recalibrating: false,
     log: [],
@@ -161,6 +170,7 @@ export function createTripController(deps: TripDeps, cfg: Config = DEFAULT_CONFI
   let engine: VisionEngine | null = null
   let loop: FrameLoop | null = null
   let speed: SpeedMonitor | null = null
+  let motion: MotionMonitor | null = null
   let stopVisibility: (() => void) | null = null
   let stopBattery: (() => void) | null = null
   let batteryWarned = false
@@ -315,6 +325,7 @@ export function createTripController(deps: TripDeps, cfg: Config = DEFAULT_CONFI
     }
     dispatch({ type: 'PERMISSIONS_GRANTED', t: deps.now() })
     if (options.useLocation) speed = deps.startSpeedMonitor(cfg.speed.armAboveKmh)
+    if (options.useMotion !== false && deps.startMotionMonitor) motion = deps.startMotionMonitor()
 
     const engineOk = await startEngine(options.preferGpu ?? true)
     if (cancelled()) {
@@ -378,6 +389,8 @@ export function createTripController(deps: TripDeps, cfg: Config = DEFAULT_CONFI
     camera = null
     speed?.stop()
     speed = null
+    motion?.stop()
+    motion = null
   }
 
   function faultWith(reason: FaultReason, detail?: string) {
@@ -617,16 +630,25 @@ export function createTripController(deps: TripDeps, cfg: Config = DEFAULT_CONFI
     baseline = b
     quality.setBaselineJitter(b.jitter)
     pipeline = createSignalPipeline(cfg, b)
+    const mountWarning = !b.approximate && mountTooFarToSide(b, cfg.calibration)
+    if (mountWarning) log(`phone mounted ${Math.abs(b.yawDeg).toFixed(0)}° to the side`)
     publish({
       calibration: { ...snap.calibration, progress: 1, approximate: b.approximate },
       needsRecalibration: false,
+      mountWarning,
     })
   }
 
   function onMonitoringFrame(frame: ProcessedFrame) {
     const p = pipeline
     if (p === null) return
-    const out = p.update(frame, { armed: speed?.armed() ?? true, alarmActive: session.monitoring.latched !== null })
+    const out = p.update(frame, {
+      armed: speed?.armed() ?? true,
+      alarmActive: session.monitoring.latched !== null,
+      // With location on, the speed decides (null = no GPS fix = moving); without it, always armed.
+      ...(speed !== null && { speedKmh: speed.speedKmh() }),
+      ...(motion !== null && { motion: motion.state() }),
+    })
     dispatch({ type: 'FRAME', signals: out.signals })
 
     if (recalibFrames !== null) {

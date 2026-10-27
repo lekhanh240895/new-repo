@@ -49,6 +49,10 @@ export interface MonitoringState {
   lastT: number | null;
   sensor: SensorState;
   closedSince: number | null;
+  /** Eyes read "open" since this time, inside a closure (a short gap keeps the closure going). */
+  openSince: number | null;
+  /** Eyes closed while stopped (no alarms then): for the "resting eyes" advisory. */
+  restClosedSince: number | null;
   offRoadSince: number | null;
   /** Off-road time per frame inside the sliding window. */
   offRoadLog: readonly { t: number; dt: number }[];

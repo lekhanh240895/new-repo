@@ -5,6 +5,7 @@ import { openCamera } from '../../platform/camera.ts'
 import { watchBattery } from '../../platform/battery.ts'
 import { createScreenWakeLock, vibrateFor, watchVisibility } from '../../platform/device.ts'
 import { startFrameLoop } from '../../platform/frameLoop.ts'
+import { startMotionMonitor } from '../../platform/motion.ts'
 import { startSpeedMonitor } from '../../platform/speed.ts'
 import { createWatchdog } from '../../platform/watchdog.ts'
 import { showNotification } from '../../platform/notify.ts'
@@ -32,6 +33,7 @@ function realDeps(): TripDeps {
     watchdog: createWatchdog(DEFAULT_CONFIG.watchdog.stallMs, DEFAULT_CONFIG.watchdog.startupMs),
     now: () => performance.now(),
     watchBattery,
+    startMotionMonitor: () => startMotionMonitor(),
     notify: () => {
       const lang = currentLang()
       showNotification(translate(lang, 'notify.title'), translate(lang, 'notify.body'))

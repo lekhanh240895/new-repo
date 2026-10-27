@@ -17,6 +17,8 @@ const CHANNELS = [
   'rollDeg',
   'gazeX',
   'gazeY',
+  'lookX',
+  'lookY',
 ] as const
 
 type Channel = (typeof CHANNELS)[number]
@@ -47,6 +49,8 @@ const GROUP: Record<Channel, ChannelGroup> = {
   rollDeg: 'angle',
   gazeX: 'gaze',
   gazeY: 'gaze',
+  lookX: 'gaze',
+  lookY: 'gaze',
 }
 
 export interface SignalSmoother {
@@ -81,6 +85,8 @@ export function createSignalSmoother(params: Readonly<Record<ChannelGroup, OneEu
             earR: f('earR', eye.earR, t),
             blinkL: f('blinkL', eye.blinkL, t),
             blinkR: f('blinkR', eye.blinkR, t),
+            ...(eye.lookX !== undefined && { lookX: f('lookX', eye.lookX, t) }),
+            ...(eye.lookY !== undefined && { lookY: f('lookY', eye.lookY, t) }),
           },
         }),
         ...(mouth && { mouth: { mar: f('mar', mouth.mar, t), jawOpen: f('jawOpen', mouth.jawOpen, t) } }),

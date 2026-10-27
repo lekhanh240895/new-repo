@@ -25,7 +25,21 @@ export interface FrameResult {
    * widthL/widthR: eye corner-to-corner distance (fraction of image height). The eye
    * nearer the camera looks wider when the head turns.
    */
-  eye?: { earL: number; earR: number; blinkL: number; blinkR: number; widthL: number; widthR: number };
+  eye?: {
+    earL: number;
+    earR: number;
+    blinkL: number;
+    blinkR: number;
+    widthL: number;
+    widthR: number;
+    /**
+     * Eye direction from the eyeLook* blendshapes, −1..1, same conventions as
+     * `gaze` (x × pose.gazeXRightSign > 0 = right, y > 0 = up). A second opinion
+     * to the iris geometry, which is noisy when squinting or behind glasses.
+     */
+    lookX?: number;
+    lookY?: number;
+  };
   mouth?: { mar: number; jawOpen: number };
   /** From the facial transformation matrix, in degrees. */
   pose?: { pitchDeg: number; yawDeg: number; rollDeg: number };
@@ -87,4 +101,31 @@ export interface FrameSignals {
   fatigue: FatigueLevel;
   /** False when the car is known to be stopped (SPEC §10.6). */
   armed: boolean;
+  /** Distraction alarms allowed (speed context). Default: `armed`. */
+  armedD?: boolean;
+  /** Microsleep alarms allowed (speed context). Default: `armed`. */
+  armedL?: boolean;
+  /** Where the driver is looking now (T3). */
+  zone?: GazeZone;
+  /** Eyes-off-road time before D1 / D2 for the current zone and speed. Default: config.offRoad. */
+  offRoadD1Ms?: number;
+  offRoadD2Ms?: number;
+  /** Whether this look counts toward the "time off road within 30 s" total. Default: true. */
+  countsTowardShare?: boolean;
 }
+
+/** Where the driver looks (combined head + eyes), relative to the calibrated road ahead. */
+export type GazeZone =
+  | 'road'
+  | 'up'
+  | 'mirrorLeft'
+  | 'mirrorRight'
+  | 'rearview'
+  | 'cluster'
+  | 'console'
+  | 'lap'
+  | 'sideLeft'
+  | 'sideRight'
+
+/** From GPS speed (T1). 'unknown' = no GPS fix: treated as moving. */
+export type SpeedClass = 'unknown' | 'stopped' | 'maneuver' | 'slow' | 'normal'

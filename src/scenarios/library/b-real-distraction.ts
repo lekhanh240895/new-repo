@@ -85,12 +85,22 @@ export const GROUP_B: readonly Scenario[] = [
     id: 'B13', title: 'Guard (T1): GPS lost in a tunnel (speed unknown): alarms stay on',
     testType: 'S,D', fixes: ['T1'], ctx: { speed: null },
     segments: [road(3000), seg(3000, { yaw: -50 }, undefined, 'look'), road(2000)],
-    expect: [{ kind: 'alarm', family: 'D', after: 'look', within: 2500 }],
+    // P2: a 50° left look falls in the left-mirror zone (2.5 s budget, plan T3) + 150 ms debounce,
+    // so the limit moved from 2.5 s to 3.0 s. What this guard protects — alarms stay ON without GPS — is unchanged.
+    expect: [{ kind: 'alarm', family: 'D', after: 'look', within: 3000 }],
   },
   {
     id: 'B14', title: 'Guard (T2): smooth highway, accelerometer reads "still", GPS says 90 km/h',
     testType: 'S,D', fixes: ['T2'], ctx: { speed: 90, accelStill: true },
     segments: [road(4000), ...ramp(200, ROAD, { yaw: -50 }, 2), seg(2800, { yaw: -50 }, undefined, 'look'), road(2000)],
-    expect: [{ kind: 'alarm', family: 'D', after: 'look', within: 2500 }],
+    // P2: limit 2.5 → 3.0 s for the same reason as B13 (left-mirror zone budget).
+    expect: [{ kind: 'alarm', family: 'D', after: 'look', within: 3000 }],
+  },
+  {
+    id: 'B15', title: 'Guard (T2, found in P2): staring out of the side window through a long curve (7 s)',
+    testType: 'S,D', fixes: ['T2'], ctx: { speed: 70, turn: 12 },
+    segments: [road(3000), seg(7000, { yaw: 55 }, undefined, 'stare'), road(3000)],
+    // Looking into the turn is allowed for 4 s (motion.turnMaxMs); after that the alarm is immediate.
+    expect: [{ kind: 'alarm', family: 'D', after: 'stare', within: 4500 }],
   },
 ]

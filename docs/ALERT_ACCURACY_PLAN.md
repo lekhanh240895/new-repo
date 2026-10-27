@@ -1,4 +1,4 @@
-# Alert accuracy plan — 100 failure cases (+1 found in P1)
+# Alert accuracy plan — 100 failure cases (+2 found while building)
 
 **Goal:** fewer false alerts when the driver looks away *for driving* (intersections,
 mirrors, red lights, parking), **without** missing real distraction or microsleep.
@@ -96,7 +96,7 @@ checked on a device).
 | A37 | Smiling / squinting: iris hard to see → false "eyes down" | False off-road flicker | On road | T3, T6 | S, R |
 | A38 | Glasses reflection on the iris → gaze jumps | False off-road flicker | On road | T6 (+ gaze confidence) | S, R |
 
-### B. Real distraction that must still alert — missed or late today (14)
+### B. Real distraction that must still alert — missed or late today (14 + 1)
 
 | ID | Situation | Today | Expected | Fix | Test |
 | --- | --- | --- | --- | --- | --- |
@@ -114,6 +114,7 @@ checked on a device).
 | B12 | Phone ↔ road alternation looks like "scanning" | (Risk created by T5) | Not scanning: down glances never count as scanning | T5 guard | S |
 | B13 | GPS lost in a tunnel or city canyon → speed unknown | (Risk created by T1) | Unknown speed = moving (alarms stay on) | T1 guard | S, D |
 | B14 | Smooth highway: accelerometer says "stopped" by mistake | (Risk created by T2) | Accelerometer "stopped" only without GPS, very still for ≥ 3 s, and no rotation | T2 guard | S, D |
+| B15 | **Found in P2:** staring out of the side window through a long curve | (Risk created by T2: "looking into the turn" had no time limit) | Allowed for 4 s, then an immediate alarm | T2 guard | S, D |
 
 ### C. False "eyes closed" (microsleep) alerts (18)
 
@@ -184,9 +185,9 @@ checked on a device).
 | F09 | City driving: too many soft beeps → driver turns the app off | Not measured | Soft beep at most once per 30 s unless escalating; "alerts per hour" in the trip summary | T10 | S |
 | F10 | Calibration done while looking around at a red light | Rejected as "moving" (OK) | Keep; plus automatic re-centering later | T7 | S |
 
-**Totals:** A 38 + B 14 + C 18 + D 10 + E 11 + F 10 = **101** (E11 was found while building P1).
-By test type: **93** have a synthetic trace that runs in CI (52 synthetic only). **25** also need a
-real clip (8 of them can *only* be tested with a real clip), and **24** also need a check with
+**Totals:** A 38 + B 15 + C 18 + D 10 + E 11 + F 10 = **102** (E11 found in P1, B15 found in P2).
+By test type: **94** have a synthetic trace that runs in CI (52 synthetic only). **25** also need a
+real clip (8 of them can *only* be tested with a real clip), and **25** also need a check with
 real phone sensors (GPS / motion).
 
 ---
@@ -204,7 +205,7 @@ real phone sensors (GPS / motion).
 | **P7** | Real-clip validation for the R cases (you record, parked or at a desk) | T14 |
 
 **Done when:**
-- All 93 synthetic traces pass in CI.
+- All 94 synthetic traces pass in CI.
 - **Zero misses** on every case where the expected result is an alert (B, D and the must-alarm C cases).
 - Recorded clips pass for the R cases you were able to record.
 
@@ -220,6 +221,38 @@ Found while building P1:
   cases before any automatic tuning.
 - **C13** (dusk noise) and **C17** (60° head turn) already pass: the M2 smoothing removes
   single-frame flicker. C17 depends on assumed eyelid values and needs a real clip.
+
+### P2 results (speed context, motion sensors, gaze zones, hysteresis)
+
+**66 pass, 28 fail, 8 need a real clip** (was 40 / 53 / 8). **25 improved, 0 regressed.**
+
+What changed:
+- **Gaze zones (T3):** head + eyes combined, then mapped to road / up / left mirror / right mirror /
+  rear-view / speedometer / center console / lap / left side / right side. Iris and blendshape
+  ("two opinions") must agree before the eyes count as looking somewhere.
+- **Budgets:** mirrors 2.5 s, rear-view 3.0 s, side / speedometer / console / lap 2.0 s.
+  Mirrors, rear-view and speedometer no longer add to the "time off road within 30 s" total.
+- **Speed (T1):** < 3 km/h no alarms (closed eyes ≥ 2 s → one advisory, C08); < 10 km/h microsleep
+  alarms only; 10–30 km/h side and mirror looks get 3.5 s. **Phone, lap and console never relax.**
+- **Motion (T2):** looking into a turn counts as driving for up to 4 s, then an immediate alarm (B15).
+- **Hysteresis (T6):** zones must last 150 ms; leave the road at 30°, come back at 22°; one noisy
+  "open" frame no longer restarts an eye closure (D05).
+- **Mount check (A23):** calibration warns when the phone is more than 35° to the side.
+
+Trade-off you should know about: **B13 and B14** (alarms stay on without GPS / with a wrong
+"still" reading) still alarm, but a 50° look to the left now falls in the left-mirror zone, so the
+alarm comes at ~2.7 s instead of within 2.5 s. Their limit moved to 3.0 s. The mirror and a left
+window cannot be told apart from head angle alone.
+
+Still to confirm on a real phone (each is one config value if wrong):
+1. Head **yaw** sign (`pose.yawRightSign`): turn your head right in Debug mode → yaw positive?
+2. Blendshape eye direction matches the iris (Debug "Gaze" chart: iris x and blend x move together).
+3. Gyroscope turn sign: on a real right turn, the turn rate is positive.
+4. Assumption in A37/A38: when smiling or behind glasses, the iris may read "down" but the
+   `eyeLookDown` blendshape does not (P7 clips).
+
+Still failing, by phase: P3 — A02, A17, A20, B02, B06, D03 · P4 — B01, C01, C02, C04–C07, C15,
+D01, D02, D09, E05–E11, F06 · P5 — B05, F01–F03.
 
 ## 5. Safety rules for every change
 

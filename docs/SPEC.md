@@ -276,6 +276,12 @@ All numbers live in `core/config.ts`. They are **starting defaults** to tune wit
 
 ### 10.3 Eyes off road
 
+> **Updated in P2** (docs/ALERT_ACCURACY_PLAN.md): "off road" now comes from **gaze zones**
+> (head + eyes) with a budget per zone and speed — mirrors 2.5 s, rear-view 3.0 s, other zones
+> 2.0 s; side/mirror looks 3.5 s at 10–30 km/h; no distraction alarms below 10 km/h; looking
+> into a turn allowed for 4 s. Mirrors, rear-view and speedometer do not count toward the 30 s
+> total. The table below is the original v0.1 rule, kept for reference.
+
 | Event | Rule |
 | --- | --- |
 | Off-road frame | |yaw| > 30°, or pitch < −20° (looking down), or head straight but gaze.y < −0.5 (eyes down) |

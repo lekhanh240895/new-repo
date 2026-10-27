@@ -167,9 +167,9 @@ describe('fatigue (SPEC §10.2, §11)', () => {
 })
 
 describe('speed arming (SPEC §10.6)', () => {
-  it('does not alarm while the car is stopped', () => {
+  it('does not alarm while the car is stopped; resting eyes ≥ 2 s give one advisory (C08)', () => {
     const r = runTrace([{ ms: 3000, with: { eyesClosed: true, armed: false } }, { ms: 3000, with: { offRoad: true, armed: false } }])
-    expect(effectNames(r.effects)).toEqual([])
+    expect(effectNames(r.effects)).toEqual(['speak:fatigueAdvisory'])
   })
 })
 
@@ -192,3 +192,32 @@ describe('input safety', () => {
     expect(effectNames(r.effects)).toEqual(['alarm:L1'])
   })
 })
+
+describe('P2: per-zone budgets and split arming', () => {
+  it('uses the budget the detectors give for the current zone', () => {
+    const r = runTrace([{ ms: 2000 }, { ms: 2800, with: { offRoad: true, offRoadD1Ms: 2500, offRoadD2Ms: 4000 } }, { ms: 3000 }])
+    expect(effectNames(r.effects)).toEqual(['alarm:D1', 'alarmStop'])
+    near(firstTimeOf(r, 'alarm:D1'), 2000 + 2500)
+  })
+
+  it('driving looks do not add to the 30 s total', () => {
+    const glances = Array.from({ length: 8 }, () => [{ ms: 1500, with: { offRoad: true, countsTowardShare: false } }, { ms: 1000 }]).flat()
+    expect(effectNames(runTrace([{ ms: 1000 }, ...glances]).effects)).toEqual([])
+  })
+
+  it('distraction off but microsleep on (creeping in a jam)', () => {
+    const r = runTrace([{ ms: 1000 }, { ms: 3000, with: { offRoad: true, armedD: false, armedL: true } }, { ms: 1700, with: { eyesClosed: true, armedD: false, armedL: true } }])
+    expect(effectNames(r.effects)).toEqual(['alarm:L1', 'alarm:L2'])
+  })
+
+  it('one noisy "open" frame does not restart a closure (D05)', () => {
+    const r = runTrace([{ ms: 2000 }, closed(600), { ms: 67, with: { eyesClosed: false, recovered: false } }, closed(800)])
+    near(firstTimeOf(r, 'alarm:L1'), 2000 + 1000)
+  })
+
+  it('a real reopening (≥ 150 ms) does restart it', () => {
+    const r = runTrace([{ ms: 2000 }, closed(600), { ms: 300, with: { eyesClosed: false, recovered: false } }, closed(800)])
+    expect(effectNames(r.effects)).toEqual([])
+  })
+})
+

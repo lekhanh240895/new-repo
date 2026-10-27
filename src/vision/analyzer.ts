@@ -67,6 +67,21 @@ function pickDriver(result: FaceLandmarkerResult, prefer: Point | null): { index
   return entry === undefined || box === undefined ? null : { index: entry[0], box }
 }
 
+/**
+ * Eye direction from the eyeLook* blendshapes, in the same convention as the
+ * iris `gaze`: x > 0 = toward the subject's left, y > 0 = up. For the
+ * subject's left eye "Out" points to their left; for the right eye "In" does.
+ */
+function blendshapeGaze(cats: readonly { categoryName: string; score: number }[]): { lookX?: number; lookY?: number } {
+  const s = (name: string) => blendshapeScore(cats, name)
+  const parts = ['eyeLookOutLeft', 'eyeLookInLeft', 'eyeLookOutRight', 'eyeLookInRight', 'eyeLookUpLeft', 'eyeLookUpRight', 'eyeLookDownLeft', 'eyeLookDownRight'].map(s)
+  if (parts.some((v) => v === null)) return {}
+  const [outL, inL, outR, inR, upL, upR, downL, downR] = parts as number[]
+  const towardLeft = ((outL ?? 0) + (inR ?? 0)) / 2
+  const towardRight = ((inL ?? 0) + (outR ?? 0)) / 2
+  return { lookX: towardLeft - towardRight, lookY: ((upL ?? 0) + (upR ?? 0)) / 2 - ((downL ?? 0) + (downR ?? 0)) / 2 }
+}
+
 export async function createFaceAnalyzer(opts: AnalyzerOptions): Promise<FaceAnalyzer> {
   let landmarker: FaceLandmarker
   let delegate: Delegate = opts.preferGpu ? 'GPU' : 'CPU'
@@ -145,6 +160,7 @@ export async function createFaceAnalyzer(opts: AnalyzerOptions): Promise<FaceAna
           blinkR: blendshapeScore(cats, 'eyeBlinkRight') ?? 0,
           widthL: distance(lm[LEFT_EYE.p1] ?? bridge, lm[LEFT_EYE.p4] ?? bridge, aspect),
           widthR: distance(lm[RIGHT_EYE.p1] ?? bridge, lm[RIGHT_EYE.p4] ?? bridge, aspect),
+          ...blendshapeGaze(cats),
         },
         mouth: { mar: mouthAspectRatio(lm, aspect), jawOpen: blendshapeScore(cats, 'jawOpen') ?? 0 },
         gaze: { x: (gL.x + gR.x) / 2, y: (gL.y + gR.y) / 2 },

@@ -36,6 +36,7 @@ function harness(opts: { gpu?: boolean; cameraError?: CameraError; engineFails?:
   let onStall: (() => void) | null = null
   let armed = true
   let battery: ((b: { level: number; charging: boolean }) => void) | null = null
+  let turnRate: number | null = 0
   const preferArgs: ({ x: number; y: number } | null | undefined)[] = []
   const realDog = createWatchdog(DEFAULT_CONFIG.watchdog.stallMs, DEFAULT_CONFIG.watchdog.startupMs)
 
@@ -107,6 +108,7 @@ function harness(opts: { gpu?: boolean; cameraError?: CameraError; engineFails?:
     },
     now: () => clock,
     watchBattery: (cb) => ((battery = cb), () => {}),
+    startMotionMonitor: () => ({ state: () => ({ turnRate, still: false }), stop: () => void calls.push('motion.stop') }),
     notify: (k) => void calls.push(`notify:${k}`),
   }
 
@@ -125,6 +127,9 @@ function harness(opts: { gpu?: boolean; cameraError?: CameraError; engineFails?:
     },
     setBattery(level: number, charging: boolean) {
       battery?.({ level, charging })
+    },
+    setTurn(rate: number | null) {
+      turnRate = rate
     },
     async start(useLocation = false, notifyWhenPaused = false) {
       ctl.start({} as HTMLVideoElement, { useLocation, notifyWhenPaused })
@@ -437,6 +442,54 @@ describe('trip controller: battery and notifications (F18, F10)', () => {
     const h = harness()
     h.ctl.setLanguage('vi')
     expect(h.calls).toContain('lang:vi')
+  })
+})
+
+describe('trip controller: P2 context (speed, motion, mount)', () => {
+  it('warns when calibration shows the phone is mounted far to the side (A23)', async () => {
+    const h = harness()
+    await toMonitoring(h, { yaw: 38 })
+    expect(h.ctl.getSnapshot().mountWarning).toBe(true)
+  })
+
+  it('no mount warning for a centered phone', async () => {
+    const h = harness()
+    await toMonitoring(h)
+    expect(h.ctl.getSnapshot().mountWarning).toBe(false)
+  })
+
+  it('looking right into a right turn is driving; the same look without a turn alarms (T2)', async () => {
+    const h = harness()
+    await toMonitoring(h)
+    h.setTurn(25)
+    await h.run(2500, { yaw: 45 })
+    expect(h.calls.some((c) => c.startsWith('alarm:D'))).toBe(false)
+    await h.run(2000)
+    h.setTurn(0)
+    await h.run(2500, { yaw: 45 })
+    expect(h.calls.some((c) => c.startsWith('alarm:D'))).toBe(true)
+  })
+
+  it('stops the motion monitor at the end of the trip', async () => {
+    const h = harness()
+    await toMonitoring(h)
+    h.ctl.endTrip()
+    expect(h.calls).toContain('motion.stop')
+  })
+
+  it('with location on and the car stopped: closed eyes give an advisory, not an alarm (C08)', async () => {
+    const h = harness()
+    await h.start(true)
+    await h.run(SETUP_MS)
+    for (let i = 0; i < 4; i++) {
+      await h.run(1800)
+      await h.run(200, { ear: 0.05, blink: 0.95 })
+    }
+    await h.run(500)
+    h.setArmed(false) // speed 0
+    await h.run(3000, { ear: 0.05, blink: 0.95 })
+    expect(h.calls.some((c) => c.startsWith('alarm:'))).toBe(false)
+    expect(h.calls).toContain('speak:fatigueAdvisory')
   })
 })
 

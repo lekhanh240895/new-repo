@@ -58,20 +58,33 @@ describe('signal pipeline', () => {
     expect(p.update(processed(132, { faceFound: false }), ctx).signals.eyesClosed).toBeNull()
   })
 
+  /** Feed the same look for `ms` (zones are debounced: a look must last 150 ms). */
+  function hold(p: ReturnType<typeof createSignalPipeline>, from: number, ms: number, spec: Parameters<typeof processed>[1]) {
+    let out = p.update(processed(from, spec), ctx)
+    for (let t = from + 66; t <= from + ms; t += 66) out = p.update(processed(t, spec), ctx)
+    return out
+  }
+
   it('is relative to the calibrated pose (phone mounted to the side)', () => {
     const p = createSignalPipeline(cfg, { ...BASE, yawDeg: 25 })
-    const s = p.update(processed(0, { yaw: 25 }), ctx)
+    const s = hold(p, 0, 300, { yaw: 25 })
     expect(s.signals.offRoad).toBe(false)
     expect(s.signals.recovered).toBe(true)
-    expect(p.update(processed(66, { yaw: 60 }), ctx).signals.offRoad).toBe(true)
+    expect(hold(p, 400, 300, { yaw: 60 }).signals.offRoad).toBe(true)
   })
 
   it('flags looking down: head down, or eyes down with head straight', () => {
     const p = createSignalPipeline(cfg, BASE)
     // headDownSign = −1: negative pitch is "down".
-    expect(p.update(processed(0, { pitch: -25 }), ctx).signals.offRoad).toBe(true)
-    expect(p.update(processed(66, { gazeY: -0.7 }), ctx).signals.offRoad).toBe(true)
-    expect(p.update(processed(132, { gazeY: -0.2 }), ctx).signals.offRoad).toBe(false)
+    expect(hold(p, 0, 300, { pitch: -25 }).signals.offRoad).toBe(true)
+    expect(hold(p, 400, 300, { gazeY: -0.7 }).signals.offRoad).toBe(true)
+    expect(hold(p, 800, 300, { gazeY: -0.2 }).signals.offRoad).toBe(false)
+  })
+
+  it('ignores a one-frame blip (debounce)', () => {
+    const p = createSignalPipeline(cfg, BASE)
+    hold(p, 0, 300, {})
+    expect(p.update(processed(366, { yaw: 60 }), ctx).signals.offRoad).toBe(false)
   })
 
   it('uses the nearer eye on a big head turn', () => {

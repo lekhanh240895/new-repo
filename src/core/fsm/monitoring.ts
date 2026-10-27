@@ -36,6 +36,8 @@ export function createMonitoringState(): MonitoringState {
     lastT: null,
     sensor: 'OK',
     closedSince: null,
+    openSince: null,
+    restClosedSince: null,
     offRoadSince: null,
     offRoadLog: [],
     recoveredSince: null,
@@ -132,10 +134,27 @@ export function stepMonitoring(
   } else {
     closedNow = rawClosed
   }
-  if (!s.armed) closedNow = false
+  const armedD = s.armedD ?? s.armed
+  const armedL = s.armedL ?? s.armed
 
-  const closedSince = closedNow ? (m.closedSince ?? t) : null
-  const closureMs = closedSince === null ? 0 : t - closedSince
+  // Stopped: no microsleep alarms, but eyes closed for a long time still deserve an advisory (C08).
+  const restClosedSince = !armedL && rawClosed === true ? (m.restClosedSince ?? t) : null
+  const restingTooLong = restClosedSince !== null && t - restClosedSince >= cfg.microsleep.l3Ms
+  if (!armedL) closedNow = false
+
+  // A short "open" reading inside a closure (one noisy frame) does not restart the count (T6).
+  let closedSince: number | null
+  let openSince: number | null = null
+  if (closedNow) {
+    closedSince = m.closedSince ?? t
+  } else if (m.closedSince !== null && armedL) {
+    openSince = m.openSince ?? t
+    closedSince = t - openSince < cfg.eye.closedGapMs ? m.closedSince : null
+    if (closedSince === null) openSince = null
+  } else {
+    closedSince = null
+  }
+  const closureMs = closedNow && closedSince !== null ? t - closedSince : 0
 
   let micro: AlarmLevel | null = null
   if (closureMs >= cfg.microsleep.l3Ms - shift) micro = 'L3'
@@ -147,19 +166,23 @@ export function stepMonitoring(
   // --- Eyes off road ---
   const rawOff = blind ? null : s.offRoad
   let offNow = rawOff === null ? m.offRoadSince !== null || isDistraction(m.latched) : rawOff
-  if (!s.armed) offNow = false
+  if (!armedD) offNow = false
 
+  // Each gaze zone has its own budget (T3); driving looks (mirrors, speedometer) do not add to the total.
+  const d1Ms = s.offRoadD1Ms ?? cfg.offRoad.d1Ms
+  const d2Ms = s.offRoadD2Ms ?? cfg.offRoad.d2Ms
+  const countsTowardShare = s.countsTowardShare ?? true
   const offRoadSince = offNow ? (m.offRoadSince ?? t) : null
   const offContinuousMs = offRoadSince === null ? 0 : t - offRoadSince
   const windowStart = t - cfg.offRoad.windowMs
   const offRoadLog = m.offRoadLog.filter((e) => e.t > windowStart)
-  if (offNow && dt > 0) offRoadLog.push({ t, dt })
+  if (offNow && countsTowardShare && dt > 0) offRoadLog.push({ t, dt })
   const offTotalMs = offRoadLog.reduce((sum, e) => sum + e.dt, 0)
 
   let dist: AlarmLevel | null = null
-  if (offNow && (offContinuousMs >= cfg.offRoad.d2Ms || offTotalMs > cfg.offRoad.windowTotalMs)) {
+  if (offNow && (offContinuousMs >= d2Ms || (countsTowardShare && offTotalMs > cfg.offRoad.windowTotalMs))) {
     dist = 'D2'
-  } else if (offContinuousMs >= cfg.offRoad.d1Ms) {
+  } else if (offContinuousMs >= d1Ms) {
     dist = 'D1'
   }
 
@@ -194,6 +217,15 @@ export function stepMonitoring(
     fatigue = 'ADVISORY'
   }
   let lastStrongSpokenAt = m.lastStrongSpokenAt
+  if (
+    restingTooLong &&
+    latched === null &&
+    speechEffects.length === 0 &&
+    (lastAdvisorySpokenAt === null || t - lastAdvisorySpokenAt >= cfg.fatigue.advisoryRepeatMs)
+  ) {
+    speechEffects.push({ type: 'speak', message: 'fatigueAdvisory' })
+    lastAdvisorySpokenAt = t
+  }
   if (latched === null && speechEffects.length === 0) {
     if (
       fatigue === 'STRONG' &&
@@ -234,6 +266,8 @@ export function stepMonitoring(
       lastT: t,
       sensor: s.sensor,
       closedSince,
+      openSince,
+      restClosedSince,
       offRoadSince,
       offRoadLog,
       recoveredSince,

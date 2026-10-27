@@ -6,10 +6,11 @@ import { createOnlineEarTracker, type EarRange } from '../calibration/onlineEar.
 import type { Baseline } from '../calibration/baseline.ts'
 import type { Config } from '../config.ts'
 import { clamp } from '../stats.ts'
-import type { FatigueLevel, FrameSignals, ProcessedFrame } from '../types.ts'
+import type { FatigueLevel, FrameSignals, GazeZone, ProcessedFrame, SpeedClass } from '../types.ts'
 import { createNodDetector } from './nod.ts'
 import { createEventCounter, createPerclos } from './windows.ts'
 import { createYawnDetector } from './yawn.ts'
+import { classifyZone, combinedGaze, createZoneTracker, eyeConsensus, speedClass, zonePolicy, type ZonePolicy } from './zones.ts'
 
 /** Extra numbers for Debug mode and trip logs. */
 export interface SignalDebug {
@@ -18,8 +19,11 @@ export interface SignalDebug {
   mouth: number | null;
   /** Head below baseline in degrees (positive = down). */
   downDeg: number | null;
-  /** Head turn from baseline in degrees. */
+  /** Head turn from baseline in degrees (> 0 = right). */
   yawDeg: number | null;
+  /** Debounced gaze zone (null = cannot tell this frame). */
+  zone: GazeZone | null;
+  speedClass: SpeedClass | null;
   perclos: number | null;
   slowBlinks: number;
   yawns: number;
@@ -29,11 +33,21 @@ export interface SignalDebug {
   needsRecalibration: boolean;
 }
 
+export interface MotionState {
+  /** Car turning rate from the gyroscope, °/s (> 0 = right); null = no sensor. */
+  turnRate: number | null;
+  /** The phone has been very still for a while (may be stopped). Used only without GPS. */
+  still: boolean;
+}
+
 export interface PipelineContext {
-  /** Car moving (or speed unknown). */
+  /** Car moving (or speed unknown). Used when `speedKmh` is not given. */
   armed: boolean;
   /** An alarm is active: do not adapt the baseline now. */
   alarmActive: boolean;
+  /** GPS speed in km/h; null = no fix; undefined = location not used (then `armed` decides). */
+  speedKmh?: number | null;
+  motion?: MotionState;
 }
 
 export interface SignalPipeline {
@@ -57,6 +71,9 @@ export function createSignalPipeline(cfg: Config, baseline: Baseline): SignalPip
   const nod = createNodDetector(cfg.fatigue, cfg.pose)
   let closedSince: number | null = null
   let shiftedSince: number | null = null
+  const zones = createZoneTracker(cfg.zones.dwellMs)
+  let lastPolicy: ZonePolicy = { offRoad: false, turningInto: false, d1Ms: cfg.offRoad.d1Ms, d2Ms: cfg.offRoad.d2Ms, countsTowardShare: false }
+  let turningIntoSince: number | null = null
 
   function fatigueLevel(t: number, p: number | null): FatigueLevel {
     const f = cfg.fatigue
@@ -79,9 +96,9 @@ export function createSignalPipeline(cfg: Config, baseline: Baseline): SignalPip
       const seen = smooth.faceFound && smooth.pose !== undefined
       const usable = seen && frame.frameValid && smooth.eye !== undefined
 
-      // --- Head pose relative to baseline ---
+      // --- Head pose relative to baseline (physical directions: down > 0, right > 0) ---
       const downDeg = seen && smooth.pose ? (smooth.pose.pitchDeg - baseline.pitchDeg) * cfg.pose.headDownSign : null
-      const yawDeg = seen && smooth.pose ? smooth.pose.yawDeg - baseline.yawDeg : null
+      const yawDeg = seen && smooth.pose ? (smooth.pose.yawDeg - baseline.yawDeg) * cfg.pose.yawRightSign : null
 
       // --- Eyes ---
       const range = ear.current()
@@ -118,25 +135,43 @@ export function createSignalPipeline(cfg: Config, baseline: Baseline): SignalPip
       if (yawn.update(t, mouth)) yawns.add(t)
       if (nod.update(t, usable ? downDeg : null)) nods.add(t)
 
-      // --- Off road (SPEC §10.3) ---
-      let offRoad: boolean | null = null
+      // --- Where the driver looks: combined head + eyes → zone (T3), debounced (T6) ---
+      let gazeYaw = 0
+      let rawZone: GazeZone | null = null
       if (usable && downDeg !== null && yawDeg !== null) {
-        const gazeDown = (smooth.gaze?.y ?? 0) - baseline.gazeY < cfg.offRoad.gazeDownBelow
-        const headStraight = Math.abs(yawDeg) < cfg.alert.recoveryPoseDeg && Math.abs(downDeg) < cfg.alert.recoveryPoseDeg
-        offRoad = Math.abs(yawDeg) > cfg.offRoad.yawDeg || downDeg > cfg.offRoad.pitchDownDeg || (headStraight && gazeDown)
+        const xSign = cfg.pose.gazeXRightSign
+        const lookX = smooth.eye?.lookX
+        const eyeRight = eyeConsensus((smooth.gaze?.x ?? 0) * xSign, lookX === undefined ? undefined : lookX * xSign)
+        const eyeUp = eyeConsensus((smooth.gaze?.y ?? 0) - baseline.gazeY, smooth.eye?.lookY)
+        const g = combinedGaze(yawDeg, downDeg, eyeRight, eyeUp, cfg.zones)
+        gazeYaw = g.yaw
+        rawZone = classifyZone(g.yaw, g.pitch, zones.current(), cfg.zones)
       }
+      const zone = zones.update(t, rawZone)
+
+      // --- Speed context (T1) and turning (T2) decide the budget for this zone ---
+      const sc = ctx.speedKmh === undefined ? null : speedClass(ctx.speedKmh, ctx.motion?.still ?? false, cfg.speedContext)
+      if (zone !== null) {
+        let policy = zonePolicy(zone, gazeYaw, sc ?? 'unknown', ctx.motion?.turnRate ?? null, cfg)
+        // Looking into a turn is driving — but not for ever (guard B15).
+        turningIntoSince = policy.turningInto ? (turningIntoSince ?? t) : null
+        if (turningIntoSince !== null && t - turningIntoSince >= cfg.motion.turnMaxMs) {
+          // The eyes have already been off the road for turnMaxMs: no further budget, alarm now.
+          const normal = zonePolicy(zone, gazeYaw, sc ?? 'unknown', null, cfg)
+          policy = { ...normal, d1Ms: 0, d2Ms: cfg.budgets.escalateMs }
+        }
+        lastPolicy = policy
+      }
+      // Face lost: keep the last zone's budget; the state machine decides how to carry the time.
+      const offRoad = zone === null ? null : lastPolicy.offRoad
+      const armedD = sc === null ? ctx.armed : sc !== 'stopped' && sc !== 'maneuver'
+      const armedL = sc === null ? ctx.armed : sc !== 'stopped'
 
       // Degraded mode (eyes hidden) still needs this, so it does not require eye data — only a valid frame.
       const headDropped = downDeg === null || !frame.frameValid ? null : downDeg >= cfg.degraded.headDropDeg
 
-      const recovered =
-        usable &&
-        openness !== null &&
-        openness > cfg.eye.openAbove &&
-        downDeg !== null &&
-        yawDeg !== null &&
-        Math.abs(downDeg) <= cfg.alert.recoveryPoseDeg &&
-        Math.abs(yawDeg) <= cfg.alert.recoveryPoseDeg
+      // Recovered: eyes clearly open and looking at the road (head and eyes combined).
+      const recovered = usable && openness !== null && openness > cfg.eye.openAbove && (zone === 'road' || zone === 'up')
 
       // --- Adapt the open-eye baseline only in calm, clearly-open moments ---
       const eligible =
@@ -154,12 +189,29 @@ export function createSignalPipeline(cfg: Config, baseline: Baseline): SignalPip
 
       const fatigue = fatigueLevel(t, p)
       return {
-        signals: { t, sensor, eyesClosed, headDropped, offRoad, recovered, fatigue, armed: ctx.armed },
+        signals: {
+          t,
+          sensor,
+          eyesClosed,
+          headDropped,
+          offRoad,
+          recovered,
+          fatigue,
+          armed: ctx.armed,
+          armedD,
+          armedL,
+          ...(zone !== null && { zone }),
+          offRoadD1Ms: lastPolicy.d1Ms,
+          offRoadD2Ms: lastPolicy.d2Ms,
+          countsTowardShare: lastPolicy.countsTowardShare,
+        },
         debug: {
           openness,
           mouth,
           downDeg,
           yawDeg,
+          zone,
+          speedClass: sc,
           perclos: p,
           slowBlinks: slowBlinks.count(t),
           yawns: yawns.count(t),

@@ -30,6 +30,8 @@ export interface CalibrationConfig {
   onlineWindowMs: number;
   maxDriftRatio: number;
   recalibratePoseShiftDeg: number;
+  /** Calibrated head angle beyond this means the phone is mounted too far to the side (A23). */
+  maxMountYawDeg: number;
   recalibrateAfterMs: number;
 }
 
@@ -41,6 +43,8 @@ export interface EyeConfig {
   /** Beyond this |yaw| the far eye is ignored. */
   farEyeYawDeg: number;
   blinkMinMs: number;
+  /** A closure survives "open" readings shorter than this (one noisy frame, T6). */
+  closedGapMs: number;
   blinkMaxMs: number;
   slowBlinkMaxMs: number;
 }
@@ -87,14 +91,80 @@ export interface FatigueConfig {
   strongRepeatMs: number;
 }
 
+/** Default eyes-off-road timing; gaze zones (ZoneConfig) can give a zone its own budget. */
 export interface OffRoadConfig {
-  yawDeg: number;
-  pitchDownDeg: number;
-  gazeDownBelow: number;
   d1Ms: number;
   d2Ms: number;
   windowMs: number;
   windowTotalMs: number;
+}
+
+/**
+ * Gaze zones (docs/ALERT_ACCURACY_PLAN.md, T3). Angles are the combined gaze
+ * (head + eyes) relative to the calibrated road ahead: yaw > 0 = right,
+ * pitch > 0 = up. Mirror positions assume a left-hand-drive car (Vietnam).
+ */
+export interface ZoneConfig {
+  /** Leave the road zone beyond this yaw… */
+  roadYaw: number;
+  /** …and come back only inside this one (hysteresis, T6). */
+  roadYawReturn: number;
+  /** Looking down past this pitch leaves the road zone… */
+  downPitch: number;
+  /** …and coming back needs this (hysteresis). */
+  downPitchReturn: number;
+  /** At or above this pitch the driver looks up (signs, lights): still counts as road. */
+  upPitch: number;
+  /** Degrees of gaze added by the eyes at full deflection (iris / blendshape = ±1). */
+  eyeYawDeg: number;
+  eyePitchDeg: number;
+  /** Below this pitch it is the lap / phone, unless it is the center console. */
+  lapPitch: number;
+  clusterYaw: number;
+  /** [from, to] yaw of the center console (right of the driver). */
+  consoleYaw: [number, number];
+  /** [from, to] yaw of the rear-view mirror, and the minimum pitch (it is up-right). */
+  rearviewYaw: [number, number];
+  rearviewPitch: number;
+  /** Left mirror: from the road edge out to this yaw (negative). */
+  mirrorLeftYaw: number;
+  /** [from, to] yaw of the right mirror (far right in a left-hand-drive car). */
+  mirrorRightYaw: [number, number];
+  /** A new zone must last this long before it counts (debounce, T6). */
+  dwellMs: number;
+}
+
+/** How long each zone may hold the eyes before D1 (D2 = D1 + escalateMs). */
+export interface ZoneBudgetConfig {
+  mirrorMs: number;
+  rearviewMs: number;
+  sideMs: number;
+  clusterMs: number;
+  consoleMs: number;
+  lapMs: number;
+  escalateMs: number;
+  /** At slow speed, side and mirror looks get at least this long (decision 4). Never phone/lap/console. */
+  slowSideMs: number;
+}
+
+/** Speed classes from GPS (T1). Below `maneuverBelowKmh` there are no distraction alarms. */
+export interface SpeedContextConfig {
+  /** Below this: stopped — no alarms at all; resting eyes give an advisory instead. */
+  stoppedBelowKmh: number;
+  /** Below this: parking / creeping — microsleep alarms only. */
+  maneuverBelowKmh: number;
+  /** Below this: slow — longer budgets for side and mirror looks. */
+  slowBelowKmh: number;
+}
+
+/** Motion sensors (T2). */
+export interface MotionConfig {
+  /** Car turning at least this fast (°/s): looking into the turn is driving. */
+  turnRateDegS: number;
+  /** …up to this far to the side. */
+  turnMaxGazeDeg: number;
+  /** …and for at most this long in one go (guard B15: staring out of the window in a long curve). */
+  turnMaxMs: number;
 }
 
 export interface DegradedConfig {
@@ -124,6 +194,17 @@ export interface PoseConfig {
    * real device in Debug mode (SPEC §17.1); flip to 1 if it is the other way.
    */
   headDownSign: 1 | -1;
+  /**
+   * `(yaw − baseline) × yawRightSign > 0` means "head turned right". +1 is an
+   * assumption, like headDownSign: confirm in Debug mode by turning right.
+   */
+  yawRightSign: 1 | -1;
+  /**
+   * `gaze.x × gazeXRightSign > 0` means "eyes look right". From the landmark
+   * geometry (eye-corner order in features.ts), +x points to the subject's
+   * left, so this is −1.
+   */
+  gazeXRightSign: 1 | -1;
   /** Within this many degrees of baseline counts as "level" (nod start and end). */
   levelDeg: number;
 }
@@ -176,6 +257,10 @@ export interface Config {
   degraded: DegradedConfig;
   alert: AlertConfig;
   speed: SpeedConfig;
+  zones: ZoneConfig;
+  budgets: ZoneBudgetConfig;
+  speedContext: SpeedContextConfig;
+  motion: MotionConfig;
   pose: PoseConfig;
   mouth: MouthConfig;
   setup: SetupConfig;
@@ -209,6 +294,7 @@ export const DEFAULT_CONFIG: Readonly<Config> = Object.freeze<Config>({
     onlineWindowMs: 5 * MINUTE,
     maxDriftRatio: 0.15,
     recalibratePoseShiftDeg: 15,
+    maxMountYawDeg: 35,
     recalibrateAfterMs: 30 * SECOND,
   },
   eye: {
@@ -217,6 +303,7 @@ export const DEFAULT_CONFIG: Readonly<Config> = Object.freeze<Config>({
     openAbove: 0.6,
     farEyeYawDeg: 25,
     blinkMinMs: 50,
+    closedGapMs: 150,
     blinkMaxMs: 400,
     slowBlinkMaxMs: 1000,
   },
@@ -253,9 +340,6 @@ export const DEFAULT_CONFIG: Readonly<Config> = Object.freeze<Config>({
     strongRepeatMs: 5 * MINUTE,
   },
   offRoad: {
-    yawDeg: 30,
-    pitchDownDeg: 20,
-    gazeDownBelow: -0.5,
     d1Ms: 2.0 * SECOND,
     d2Ms: 3.5 * SECOND,
     windowMs: 30 * SECOND,
@@ -275,8 +359,47 @@ export const DEFAULT_CONFIG: Readonly<Config> = Object.freeze<Config>({
     armAboveKmh: 10,
     debugOffAboveKmh: 5,
   },
+  zones: {
+    roadYaw: 30,
+    roadYawReturn: 22,
+    downPitch: -15,
+    downPitchReturn: -10,
+    upPitch: 20,
+    eyeYawDeg: 30,
+    eyePitchDeg: 25,
+    lapPitch: -30,
+    clusterYaw: 20,
+    consoleYaw: [10, 40],
+    rearviewYaw: [18, 45],
+    rearviewPitch: 8,
+    mirrorLeftYaw: -60,
+    mirrorRightYaw: [50, 75],
+    dwellMs: 150,
+  },
+  budgets: {
+    mirrorMs: 2.5 * SECOND,
+    rearviewMs: 3.0 * SECOND,
+    sideMs: 2.0 * SECOND,
+    clusterMs: 2.0 * SECOND,
+    consoleMs: 2.0 * SECOND,
+    lapMs: 2.0 * SECOND,
+    escalateMs: 1.5 * SECOND,
+    slowSideMs: 3.5 * SECOND,
+  },
+  speedContext: {
+    stoppedBelowKmh: 3,
+    maneuverBelowKmh: 10,
+    slowBelowKmh: 30,
+  },
+  motion: {
+    turnRateDegS: 8,
+    turnMaxGazeDeg: 70,
+    turnMaxMs: 4 * SECOND,
+  },
   pose: {
     headDownSign: -1,
+    yawRightSign: 1,
+    gazeXRightSign: -1,
     levelDeg: 5,
   },
   mouth: {

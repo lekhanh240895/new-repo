@@ -28,9 +28,14 @@ const POSE_SERIES: Series[] = [
   { label: 'yaw', color: ORANGE, get: (s) => s.smooth.pose?.yawDeg },
   { label: 'roll', color: PURPLE, get: (s) => s.smooth.pose?.rollDeg },
 ]
+const GREEN = '#2fbf71'
+const PINK = '#ff7eb6'
+/** Iris and blendshape eye direction should move together; if not, check the sign conventions. */
 const GAZE_SERIES: Series[] = [
-  { label: 'gaze x', color: BLUE, get: (s) => s.smooth.gaze?.x },
-  { label: 'gaze y', color: ORANGE, get: (s) => s.smooth.gaze?.y },
+  { label: 'iris x', color: BLUE, get: (s) => s.smooth.gaze?.x },
+  { label: 'iris y', color: ORANGE, get: (s) => s.smooth.gaze?.y },
+  { label: 'blend x', color: GREEN, get: (s) => s.smooth.eye?.lookX },
+  { label: 'blend y', color: PINK, get: (s) => s.smooth.eye?.lookY },
 ]
 const PERF_SERIES: Series[] = [
   { label: 'infer ms', color: BLUE, get: (s) => s.raw.inferMs },

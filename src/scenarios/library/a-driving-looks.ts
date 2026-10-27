@@ -18,6 +18,8 @@ import {
   seg,
   SPEED,
 } from '../looks.ts'
+import { mountTooFarToSide } from '../../core/calibration/mount.ts'
+import { DEFAULT_CONFIG } from '../../core/config.ts'
 import type { Scenario } from '../types.ts'
 
 const noD = [{ kind: 'noAlarm', family: 'D' }] as const
@@ -141,7 +143,12 @@ export const GROUP_A: readonly Scenario[] = [
   {
     id: 'A23', title: 'Phone mounted far to the side (38°): setup should ask to move it toward the center',
     testType: 'S', fixes: ['T3'],
-    check: () => 'not implemented yet: setup warning when the calibrated mount angle is over 35° (P2)',
+    check: () => {
+      const c = DEFAULT_CONFIG.calibration
+      if (!mountTooFarToSide({ yawDeg: 38, approximate: false }, c)) return 'no warning for a 38° mount'
+      if (mountTooFarToSide({ yawDeg: -38, approximate: false }, c)) return null
+      return 'no warning for a 38° mount on the left'
+    },
   },
   {
     id: 'A24', title: 'Driver leans forward mid-trip: head 22° lower, eyes still on the road',
@@ -212,12 +219,14 @@ export const GROUP_A: readonly Scenario[] = [
   {
     id: 'A37', title: 'Smiling: iris hard to see, "eyes down" flickers for 20 s',
     testType: 'S,R', fixes: ['T3', 'T6'], ctx: { speed: SPEED.road },
-    segments: [road(2000), ...repeat(100, [seg(100, { gazeY: -0.6, ear: 0.24, future: { smile: 0.7 } }), seg(100, { gazeY: -0.3, ear: 0.24, future: { smile: 0.7 } })])],
+    segments: [road(2000), ...repeat(100, [seg(100, { gazeY: -0.6, ear: 0.24, future: { smile: 0.7, eyeLookDown: 0.1 } }), seg(100, { gazeY: -0.3, ear: 0.24, future: { smile: 0.7, eyeLookDown: 0.1 } })])],
     expect: noD,
+    assumptions: ['While smiling, the iris reads "down" but the eyeLookDown blendshape stays low (~0.1)'],
   },
   {
     id: 'A38', title: 'Glasses reflection: gaze jumps to "down" on 1 of 4 frames for 40 s',
     testType: 'S,R', fixes: ['T6'], ctx: { speed: SPEED.road },
-    segments: [road(2000), ...repeat(150, [seg(67, { gazeY: -0.9 }), seg(200, {})])], expect: noD,
+    segments: [road(2000), ...repeat(150, [seg(67, { gazeY: -0.9, future: { eyeLookDown: 0.1 } }), seg(200, {})])], expect: noD,
+    assumptions: ['A lens reflection fools the iris geometry, not the eyeLookDown blendshape'],
   },
 ]

@@ -43,14 +43,22 @@ export const SCENARIO_BASELINE: Readonly<Baseline> = Object.freeze({
 
 const DEFAULT_CTX: Required<Pick<Context, 'speed' | 'location'>> = { speed: 50, location: true }
 
-/** Builds what the vision worker would report for this look. */
-export function frameFor(t: number, look: Look = {}): FrameResult {
+/**
+ * Builds what the vision worker would report for this look. Scenarios use
+ * physical directions; the config sign conventions map them to raw values,
+ * so flipping a sign after a device test never silently inverts the suite.
+ */
+export function frameFor(t: number, look: Look = {}, cfg: Config = DEFAULT_CONFIG): FrameResult {
   const luma = look.luma ?? 120
   if (look.face === false) {
     return { t, inferMs: 20, faceFound: false, quality: { faceLuma: luma, faceAreaRatio: 0, landmarkJitter: 0 } }
   }
   const ear = look.ear ?? 0.3
   const blink = look.blink ?? 0.05
+  const gazeX = look.gazeX ?? 0
+  const gazeY = look.gazeY ?? 0
+  // Blendshape eye direction: agrees with the iris unless the scenario says otherwise.
+  const lookY = look.future?.eyeLookDown !== undefined ? -look.future.eyeLookDown : gazeY
   return {
     t,
     inferMs: 20,
@@ -68,10 +76,16 @@ export function frameFor(t: number, look: Look = {}): FrameResult {
       blinkR: look.blinkR ?? blink,
       widthL: look.widthL ?? 0.08,
       widthR: look.widthR ?? 0.08,
+      lookX: gazeX * cfg.pose.gazeXRightSign,
+      lookY,
     },
     mouth: { mar: look.mar ?? 0.05, jawOpen: look.jaw ?? 0.02 },
-    pose: { pitchDeg: look.pitch ?? 0, yawDeg: look.yaw ?? 0, rollDeg: 0 },
-    gaze: { x: look.gazeX ?? 0, y: look.gazeY ?? 0 },
+    pose: {
+      pitchDeg: -(look.pitch ?? 0) * cfg.pose.headDownSign,
+      yawDeg: (look.yaw ?? 0) * cfg.pose.yawRightSign,
+      rollDeg: 0,
+    },
+    gaze: { x: gazeX * cfg.pose.gazeXRightSign, y: gazeY },
   }
 }
 
@@ -220,10 +234,16 @@ export function runScenario(s: Scenario, cfg: Config = DEFAULT_CONFIG): Scenario
     for (let i = 0; i < n; i++) {
       t = Math.round((frame * 1000) / fps)
       frame++
-      const raw = frameFor(t, seg.look)
+      const raw = frameFor(t, seg.look, cfg)
       const processed: ProcessedFrame = { raw, smooth: smoother.smooth(raw), ...quality.update(raw) }
       const armed = ctx.location ? isArmed(ctx.speed, cfg.speed.armAboveKmh) : true
-      const out = pipeline.update(processed, { armed, alarmActive: session.monitoring.latched !== null })
+      const out = pipeline.update(processed, {
+        armed,
+        alarmActive: session.monitoring.latched !== null,
+        // Decisions 2 and 3: location and motion sensors are on by default.
+        ...(ctx.location && { speedKmh: ctx.speed }),
+        motion: { turnRate: ctx.turn ?? 0, still: ctx.accelStill ?? false },
+      })
       const r = reduce(session, { type: 'FRAME', signals: out.signals }, cfg)
       session = r.state
       for (const effect of r.effects) effects.push({ t, effect })
