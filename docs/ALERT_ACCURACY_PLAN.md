@@ -400,6 +400,15 @@ Recording list and instructions: [P7_RECORDING_GUIDE.md](P7_RECORDING_GUIDE.md).
   down-gaze lid correction (T8) and the lap zone never applied, and lowered lids raised L
   alarms. To re-run after the fix. Synthetic scenarios do not change (they map directions
   through the signs); the real-model trip replay still gives L1 → L2 → L3.
+- After the fix, C01 and B01 still fail. The per-frame numbers (`--share`) show why: with the
+  Mac webcam **above** the eyes, glasses, and eyes-only looks down, a 1.7 s glance and the real
+  3 s closure are the same in every signal (openness 0.15–0.20, EAR 0.03–0.05, eyeBlink
+  0.55–0.63, lookY −0.6 to −0.7, iris y ≈ 0, head within 4°). No threshold can tell them apart
+  without missing the real closure (safety rule 1), so the code is **not** changed. Lessons:
+  (1) the model reports closed eyes as lookY ≈ −0.7, so lookY alone must never excuse a
+  closure (the iris/blendshape consensus already ensures this); (2) behind glasses the iris
+  barely moves, so the down-gaze lid correction (T8) gets about half strength; (3) C01/B01/B05
+  must be recorded with the camera at dash height (guide updated).
 
 ## 5. Safety rules for every change
 

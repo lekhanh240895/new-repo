@@ -22,6 +22,11 @@ the real alarm logic, and says pass or fail.
 
 1. Put the phone in the mount where you use it while driving. Front camera, landscape or
    portrait as usual, 720p or 1080p, 30 fps. Good daylight unless the clip is about light.
+   **The camera must be where the phone sits in the car: at or below eye level.** A laptop
+   webcam above the screen does not work for the "look down" clips (C01, B01, B05): seen from
+   above, eyes looking down are hidden by the lids and look exactly like closed eyes (measured
+   on real clips: same openness, same blendshapes). At a desk, prop the phone at chest height.
+   Look down the way you really do: for the phone in your lap, tilt the head, not only the eyes.
 2. Every clip starts the same way: **10 s looking at the road, blinking normally.** This is
    the calibration (`"calibrate": [0, 10]`), like the start of a trip.
 3. Keep a stopwatch visible to you (not to the camera), or say the actions out loud, so you
