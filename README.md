@@ -98,6 +98,20 @@ npm run replay -- --mode trip --clip clips/my-clip.y4m --seconds 40 --expect-ale
 `clips/` and `replay-out/` are git-ignored. **Never commit videos of real people.**
 `npm run smoke` runs the same harness on a generated dark clip (used in CI).
 
+### Alert accuracy scenarios
+
+The [alert accuracy plan](docs/ALERT_ACCURACY_PLAN.md) lists 101 situations where alerts can go
+wrong (intersections, mirrors, red lights, texting, squinting, …). Each one is a scripted
+scenario in `src/scenarios/` that runs through the real detectors and state machine:
+
+```bash
+npm run scenarios                 # writes docs/SCENARIO_REPORT.md
+npm run scenarios -- --only A07   # one scenario with its alert timeline
+```
+
+`npm test` includes a ratchet: a scenario that passed in `src/scenarios/baseline.ts` must keep
+passing. After a fix, record the new passes with `npm run scenarios -- --update-baseline`.
+
 ### Project layout
 
 ```
@@ -107,6 +121,7 @@ src/vision/          MediaPipe wrapper, feature math, worker, engine (worker + m
 src/platform/        camera, frame loop, audio, wake lock, vibration, speed, watchdog
 src/app/trip/        trip controller + Trip screen
 src/app/debug/       Debug mode
+src/scenarios/       alert-accuracy scenario library, runner and baseline
 scripts/             asset fetch + hash check, replay harness, test clip generator
 docs/SPEC.md         product and technical spec
 docs/FAILURE_MODES.md  failure-mode coverage
