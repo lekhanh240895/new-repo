@@ -337,6 +337,35 @@ What changed:
 Real-model replay: L1 → L2 → L3, then L1 about 1 s after the eyes open, then stop + "take a
 break".
 
+### P6 results (boundary pairs, tuning report, "false alarm" marking)
+
+**114 pass, 0 fail, 8 need a real clip** (102 plan cases + 20 new boundary pairs, group G).
+
+What changed:
+- **Boundary pairs (group G):** for each main threshold, one case just under it (no alarm)
+  and one just over it (alarm in time): phone / lap 2.0 s, mirrors 2.5 s, rear-view 3.0 s,
+  speedometer 2.0 s, slow-speed side 3.5 s, blind spot 1.5 s, L1 / L2 / L3, expression delay,
+  heavy lids, near-microsleep length, green light. A new `level` expectation pins exact
+  levels (D2, L2, L3), not only "some alarm". `tuning.test.ts` proves a 15% change to the
+  lap budget or to L1 now breaks a test. This closes the P1 boundary gap.
+- **Tuning report (T13):** `npm run tune` moves each of 22 values alone (×0.6 to ×1.5) and
+  replays the whole library each time. It writes the safe range and the first case that
+  breaks on each side to [TUNING_REPORT.md](TUNING_REPORT.md). It only suggests: it never
+  edits the config. Today it has no suggestion: no single change passes more cases.
+- **"False alarm" marking (T12):** the trip summary lists each alarm episode. The driver can
+  mark a D alert or an L1 as false. Each mark adds 5%, **capped at +10%** (not the 20% first
+  planned: at +15% the library starts missing real distractions B03, B04, B07–B09, B13, B14
+  and the bumpy-road microsleep F06). Phone / lap / console budgets, L2 and L3 never change,
+  and L2/L3 episodes cannot be marked: a driver who really dozed off often does not notice.
+  Stored on the phone only (two counters). `personal.test.ts` replays every must-alarm case at
+  the cap.
+- **Summary counts episodes**, not levels: one alarm that went L1 → L2 → L3 counts once.
+
+What the report says: the values pinned most tightly by the synthetic cases (±5–10%) are the
+mirror, rear-view and slow-side budgets, the lap / speedometer budgets and L1. These are the
+first to check with real clips (P7). A wide safe range does not prove a value is right; it
+only means no scripted case is near it.
+
 ## 5. Safety rules for every change
 
 1. A fix that removes false alerts must not remove a real one. Every relaxation (T1, T2, T5, T7) has a "guard" case in group B.

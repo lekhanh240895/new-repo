@@ -107,6 +107,8 @@ scenario in `src/scenarios/` that runs through the real detectors and state mach
 ```bash
 npm run scenarios                 # writes docs/SCENARIO_REPORT.md
 npm run scenarios -- --only A07   # one scenario with its alert timeline
+npm run tune                      # how far each threshold can move: docs/TUNING_REPORT.md (~6 min)
+npm run tune -- --param budgets.lapMs
 ```
 
 `npm test` includes a ratchet: a scenario that passed in `src/scenarios/baseline.ts` must keep
@@ -115,7 +117,13 @@ passing. After a fix, record the new passes with `npm run scenarios -- --update-
 Progress: v0.1 passed 40 scenarios; after P2 (speed context, motion sensors, gaze zones) **66**;
 after P3 (attention buffer, scanning, face-lost context) **72**; after P4 (eye-closure
 robustness, drowsy eyes, clean fatigue signals) **90**; after P5 (alarm behavior) **94** of 102
-— every synthetic case. The other 8 need real recorded clips (P7).
+— every synthetic case. P6 added 20 boundary pairs (group G: just under / just over each
+threshold), so a threshold that moves ~15% now breaks a test: **114 pass**. The other 8 need
+real recorded clips (P7).
+
+After a trip, the summary lets the driver mark an alert as a false alarm. Each mark loosens
+that alert type by 5%, at most +10%, stored only on the phone. Phone looks and long eye
+closures (L2, L3) never change.
 
 ### Project layout
 
@@ -154,8 +162,8 @@ New versions are never applied in the middle of a trip: the start screen offers 
 | **M1** ✅ | Camera, vision worker + fallback, signals, quality gates, Debug mode, replay harness |
 | **M2** ✅ | Calibration, detectors, alerts (sound, voice, vibration), Wake Lock, watchdog, trip controller |
 | **M3** ✅ | Dark Cockpit UI, onboarding, Vietnamese, offline PWA, CSP, battery + pause notification — **v0.1.0** |
-| **P1–P5** ✅ | Alert accuracy: 102-case scenario library + ratchet; speed context, motion sensors, gaze zones, hysteresis; attention buffer, face-lost context; robust eye closure, drowsy eyes, clean fatigue signals; smarter alarm behavior |
-| Next | P6 tuning + boundary cases · P7 real clips · real-device checks |
+| **P1–P6** ✅ | Alert accuracy: 102-case scenario library + ratchet; speed context, motion sensors, gaze zones, hysteresis; attention buffer, face-lost context; robust eye closure, drowsy eyes, clean fatigue signals; smarter alarm behavior; boundary pairs, tuning report, "false alarm" marking |
+| Next | P7 real clips · real-device checks (signs, thresholds) |
 
 ## License
 

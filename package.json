@@ -26,7 +26,8 @@
     "smoke": "node scripts/make-test-clip.mjs replay-out/smoke-dark.y4m && node scripts/replay.mjs --clip replay-out/smoke-dark.y4m --seconds 4 --params delegate=cpu --expect-sensor LOW_VISIBILITY",
     "check": "npm run typecheck && npm run lint && npm run test",
     "offline-check": "node scripts/offline-check.mjs",
-    "scenarios": "node scripts/scenarios.ts"
+    "scenarios": "node scripts/scenarios.ts",
+    "tune": "node scripts/tune.ts"
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "1.1.1",

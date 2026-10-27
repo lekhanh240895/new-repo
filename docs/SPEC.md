@@ -332,6 +332,12 @@ Note: "eyes down ≥ 2 s" is labeled "eyes off road", **not** "phone use". It ca
 > glance (mirror, speedometer) of up to 1 s during recovery does not restart the count. Green
 > light: eyes on the phone ≥ 2 s while stopped, then the car moves with the eyes still on it →
 > D1 at once. No rate limit on D1: it would mute a real distraction alarm.
+>
+> **Updated in P6 (T12):** after the trip (parked), the summary lists each alarm episode. The
+> driver can mark a D alert or an L1 as "false". Each mark adds 5% to that type's thresholds,
+> **capped at +10%** (driving-look budgets for D; L1 and the heavy-lid / stare times for L).
+> Never changed: phone / lap / console budgets, L2, L3. L2/L3 episodes cannot be marked.
+> `personal.test.ts` proves every must-alarm scenario still passes at the cap.
 
 | Level | Trigger | Visual | Audio | Haptic (Android) |
 | --- | --- | --- | --- | --- |
@@ -414,6 +420,9 @@ The reducer is pure: `(state, event, now) → { state, effects[] }`. Effects (pl
 - **CSP:** `default-src 'self'; connect-src 'self'; img-src 'self' blob: data:; worker-src 'self' blob:; script-src 'self' 'wasm-unsafe-eval'`. Test this in CI with a header check.
 - Trip logs hold numbers and events only. They are stored in IndexedDB, can be deleted with one tap, and are auto-deleted after 30 days.
 - The Debug "record clip" feature saves to the device only, and only after an explicit tap.
+- **Personal adaptation (P6, T12):** two small counters ("false alarm" marks per alert type) in
+  `localStorage` on the device. No times, places or images. Read defensively (bad or edited
+  values fall back to defaults) and can be reset from the trip summary.
 
 ### 14.2 Security risks to manage
 

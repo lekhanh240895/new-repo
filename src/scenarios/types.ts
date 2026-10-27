@@ -82,6 +82,8 @@ export type Expectation =
   | { kind: 'noAlarm'; family?: AlarmFamily; from?: string; to?: string }
   /** An alarm of this family starts within `within` ms after the mark (default: scenario start). */
   | { kind: 'alarm'; family: AlarmFamily; after?: string; within: number }
+  /** This exact level fires within `within` ms after the mark (pins escalation timing). */
+  | { kind: 'level'; level: 'D1' | 'D2' | 'L1' | 'L2' | 'L3'; after?: string; within: number }
   /** This exact level never fires (e.g. no escalation to D2). */
   | { kind: 'noLevel'; level: 'D1' | 'D2' | 'L1' | 'L2' | 'L3' }
   /** A fatigue advisory is spoken within `within` ms after the mark. */

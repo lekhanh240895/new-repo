@@ -9,8 +9,8 @@ import { computeBaseline, fallbackBaseline, type Baseline, type CalibrationFailu
 import { mountTooFarToSide } from '../../core/calibration/mount.ts'
 import { DEFAULT_CONFIG, type Config } from '../../core/config.ts'
 import { createSignalPipeline, type SignalDebug, type SignalPipeline } from '../../core/detectors/pipeline.ts'
-import { createSession, hudStatus, reduce, type HudStatus } from '../../core/fsm/index.ts'
-import type { Effect, FaultReason, SessionEvent, SessionState } from '../../core/fsm/types.ts'
+import { alertRank, createSession, hudStatus, reduce, type HudStatus } from '../../core/fsm/index.ts'
+import type { AlarmLevel, Effect, FaultReason, SessionEvent, SessionState } from '../../core/fsm/types.ts'
 import { createQualityTracker } from '../../core/signals/quality.ts'
 import { createSignalSmoother } from '../../core/signals/smoothing.ts'
 import type { FrameResult, ProcessedFrame } from '../../core/types.ts'
@@ -60,6 +60,19 @@ export interface TripOptions {
   notifyWhenPaused?: boolean;
   /** Use the motion sensors to recognize turns and stops (decision 3: on by default). */
   useMotion?: boolean;
+  /** Config for this trip (the driver's personal adaptation, T12). Default: the controller's config. */
+  config?: Config;
+}
+
+/** One alarm episode of the trip, for the summary ("was this a false alarm?", T12). */
+export interface AlertRecord {
+  id: number;
+  /** Seconds since the trip started. */
+  atSec: number;
+  /** D = eyes off road, L = microsleep / drowsy eyes. From the episode's first alarm. */
+  family: 'D' | 'L';
+  /** Highest level reached in the episode. */
+  level: AlarmLevel;
 }
 
 export interface SetupStatus {
@@ -102,6 +115,8 @@ export interface TripSnapshot {
   mountWarning: boolean;
   needsRecalibration: boolean;
   recalibrating: boolean;
+  /** Alarm episodes of this trip (at most ALERT_LOG_SIZE). */
+  alerts: readonly AlertRecord[];
   log: readonly string[];
 }
 
@@ -131,6 +146,7 @@ const SNAPSHOT_THROTTLE_MS = 250
 const TUNE_WARMUP_FRAMES = 3
 const TUNE_EARLY_FRAMES = 10
 const LOG_SIZE = 50
+const ALERT_LOG_SIZE = 50
 /** Consecutive failed frames that count as a stall. */
 const MAX_FRAME_ERRORS = 15
 
@@ -154,12 +170,15 @@ export function initialTripSnapshot(cfg: Config = DEFAULT_CONFIG, s: SessionStat
     mountWarning: false,
     needsRecalibration: false,
     recalibrating: false,
+    alerts: [],
     log: [],
   }
 }
 
 
-export function createTripController(deps: TripDeps, cfg: Config = DEFAULT_CONFIG): TripController {
+export function createTripController(deps: TripDeps, baseCfg: Config = DEFAULT_CONFIG): TripController {
+  // Each trip may bring its own config (personal adaptation, T12); see start().
+  let cfg = baseCfg
   const listeners = new Set<() => void>()
   let session = createSession()
   let snap: TripSnapshot = initialTripSnapshot(cfg, session)
@@ -231,6 +250,27 @@ export function createTripController(deps: TripDeps, cfg: Config = DEFAULT_CONFI
     publish({})
   }
 
+  let alarmActive = false
+  /** A new alarm episode, or a higher level in the current one. */
+  function recordAlarm(level: AlarmLevel) {
+    const alerts = snap.alerts
+    const last = alerts[alerts.length - 1]
+    if (alarmActive && last !== undefined) {
+      if (alertRank(level) > alertRank(last.level)) publish({ alerts: [...alerts.slice(0, -1), { ...last, level }] })
+      return
+    }
+    alarmActive = true
+    if (alerts.length >= ALERT_LOG_SIZE) return
+    const startedAt = session.tripStartedAt ?? deps.now()
+    const record: AlertRecord = {
+      id: (last?.id ?? 0) + 1,
+      atSec: Math.max(0, Math.round((deps.now() - startedAt) / 1000)),
+      family: level.startsWith('D') ? 'D' : 'L',
+      level,
+    }
+    publish({ alerts: [...alerts, record] })
+  }
+
   function runEffect(e: Effect) {
     switch (e.type) {
       case 'unlockAudio':
@@ -252,11 +292,13 @@ export function createTripController(deps: TripDeps, cfg: Config = DEFAULT_CONFI
         teardown()
         return
       case 'alarm':
+        recordAlarm(e.level)
         deps.audio.startAlarm(e.level)
         deps.vibrate(e.level)
         publish({ audioReady: deps.audio.isReady() })
         return
       case 'alarmStop':
+        alarmActive = false
         deps.audio.stopAlarm()
         deps.vibrate('stop')
         return
@@ -686,6 +728,9 @@ export function createTripController(deps: TripDeps, cfg: Config = DEFAULT_CONFI
       if (session.phase !== 'IDLE') return
       video = v
       options = opts
+      cfg = opts.config ?? baseCfg
+      alarmActive = false
+      publish({ alerts: [] })
       restarts = 0
       frameWidth = cfg.performance.normalWidth
       smoother = createSignalSmoother()

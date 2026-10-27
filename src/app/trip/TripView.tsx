@@ -1,10 +1,13 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { DEFAULT_CONFIG } from '../../core/config.ts'
 import type { AlarmLevel, Phase } from '../../core/fsm/types.ts'
+import { atLimit, markFalseAlarm, personalize, scaleFor, type Personal } from '../../core/personal.ts'
 import { requestMotionPermission } from '../../platform/motion.ts'
+import { loadPersonal, resetPersonal, savePersonal } from '../../platform/personalStore.ts'
 import { requestNotificationPermission } from '../../platform/notify.ts'
 import { useLang, type TextKey } from '../i18n.ts'
 import { installUpdate, usePwaState } from '../pwa.ts'
-import type { TripSnapshot } from './controller.ts'
+import type { AlertRecord, TripSnapshot } from './controller.ts'
 import { useTrip } from './useTrip.ts'
 
 const ACCEPT_KEY = 'biomonitor.accepted.v1'
@@ -99,8 +102,9 @@ function Summary({ snap, t }: { snap: TripSnapshot; t: (k: TextKey) => string })
   const { session } = snap
   const stats = session.monitoring.stats
   const ms = Math.max(0, (session.tripEndedAt ?? 0) - (session.tripStartedAt ?? 0))
-  const microsleeps = stats.alarms.L1 + stats.alarms.L2 + stats.alarms.L3
-  const distractions = stats.alarms.D1 + stats.alarms.D2
+  // Episodes, not levels: one alarm that escalates L1 → L2 → L3 counts once.
+  const microsleeps = snap.alerts.filter((a) => a.family === 'L').length
+  const distractions = snap.alerts.filter((a) => a.family === 'D').length
   const duration = `${Math.floor(ms / 60_000)} ${t('unit.min')} ${Math.floor((ms % 60_000) / 1000)} ${t('unit.sec')}`
   return (
     <>
@@ -114,6 +118,68 @@ function Summary({ snap, t }: { snap: TripSnapshot; t: (k: TextKey) => string })
         {microsleeps > 0 ? t('summary.rest') : microsleeps + distractions === 0 ? t('summary.noAlerts') : ''}
       </p>
     </>
+  )
+}
+
+/**
+ * After the trip (parked): mark alerts that were wrong (T12). Each mark loosens
+ * that alert type a little for the next trips, within the safety limit.
+ */
+function AlertReview({ alerts, t }: { alerts: readonly AlertRecord[]; t: (k: TextKey) => string }) {
+  const [personal, setPersonal] = useState<Personal>(loadPersonal)
+  const [marked, setMarked] = useState<ReadonlySet<number>>(() => new Set())
+  const [saveFailed, setSaveFailed] = useState(false)
+  const percent = (f: 'D' | 'L') => String(Math.round((scaleFor(personal, f) - 1) * 100))
+
+  function mark(a: AlertRecord) {
+    const next = markFalseAlarm(personal, a.family)
+    setSaveFailed(!savePersonal(next))
+    setPersonal(next)
+    setMarked(new Set(marked).add(a.id))
+  }
+  function reset() {
+    setSaveFailed(!resetPersonal())
+    setPersonal(loadPersonal())
+  }
+
+  // L2/L3 (eyes closed 1.5 s or more) never change, so marking them would do nothing —
+  // and a driver who really dozed off often does not notice it.
+  const canMark = (a: AlertRecord) => a.family === 'D' || a.level === 'L1'
+  const changed = personal.marksD > 0 || personal.marksL > 0
+  return (
+    <div className="alert-review">
+      {alerts.length > 0 && (
+        <>
+          <h3>{t('summary.alertsTitle')}</h3>
+          <p className="muted small">{t('summary.alertsHelp')}</p>
+          <ul className="alert-list">
+            {alerts.map((a) => (
+              <li key={a.id}>
+                <span>
+                  {Math.floor(a.atSec / 60)}:{String(a.atSec % 60).padStart(2, '0')} · {t(a.family === 'D' ? 'summary.alertD' : 'summary.alertL')} ({a.level})
+                </span>
+                {marked.has(a.id) ? (
+                  <span className="muted small">{t('summary.marked')}</span>
+                ) : !canMark(a) ? (
+                  <span className="muted small">{t('summary.alwaysCounted')}</span>
+                ) : atLimit(personal, a.family) ? (
+                  <span className="muted small">{t('summary.atLimit')}</span>
+                ) : (
+                  <button type="button" onClick={() => mark(a)}>{t('summary.markFalse')}</button>
+                )}
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+      {changed && (
+        <p className="muted small">
+          {t('summary.personal').replace('{d}', percent('D')).replace('{l}', percent('L'))}{' '}
+          <button type="button" className="link" onClick={reset}>{t('summary.personalReset')}</button>
+        </p>
+      )}
+      {saveFailed && <p className="hint small">{t('summary.saveFailed')}</p>}
+    </div>
   )
 }
 
@@ -160,6 +226,8 @@ export function TripView() {
       notifyWhenPaused: notify,
       preferGpu: params.get('delegate') !== 'cpu',
       preferWorker: params.get('worker') !== '0',
+      // The driver's "false alarm" marks from earlier trips (T12), within the safety limit.
+      config: personalize(DEFAULT_CONFIG, loadPersonal()),
     })
   }
 
@@ -289,6 +357,7 @@ export function TripView() {
         <>
           <h2>{t('summary.title')}</h2>
           <Summary snap={snap} t={t} />
+          <AlertReview alerts={snap.alerts} t={t} />
           <button type="button" className="primary" onClick={() => controller.reset()}>{t('summary.new')}</button>
         </>
       )}

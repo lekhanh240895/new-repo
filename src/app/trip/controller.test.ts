@@ -3,7 +3,7 @@
  * to alarms, and the failure modes F7–F10, F16, F19, F20 (SPEC §12).
  */
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_CONFIG } from '../../core/config.ts'
+import { DEFAULT_CONFIG, type Config } from '../../core/config.ts'
 import type { FrameResult } from '../../core/types.ts'
 import type { AudioEngine } from '../../platform/audio.ts'
 import { CameraError, type CameraOptions } from '../../platform/camera.ts'
@@ -131,8 +131,8 @@ function harness(opts: { gpu?: boolean; cameraError?: CameraError; engineFails?:
     setTurn(rate: number | null) {
       turnRate = rate
     },
-    async start(useLocation = false, notifyWhenPaused = false) {
-      ctl.start({} as HTMLVideoElement, { useLocation, notifyWhenPaused })
+    async start(useLocation = false, notifyWhenPaused = false, config?: Config) {
+      ctl.start({} as HTMLVideoElement, { useLocation, notifyWhenPaused, ...(config && { config }) })
       await settle()
       await settle()
     },
@@ -167,8 +167,8 @@ function harness(opts: { gpu?: boolean; cameraError?: CameraError; engineFails?:
 }
 
 /** Setup (GPU benchmark ~2 s + 1.5 s good frames) + calibration with blinks (8 s) → MONITORING. */
-async function toMonitoring(h: ReturnType<typeof harness>, extra: Spec = {}) {
-  await h.start()
+async function toMonitoring(h: ReturnType<typeof harness>, extra: Spec = {}, config?: Config) {
+  await h.start(false, false, config)
   await h.run(SETUP_MS, extra)
   for (let i = 0; i < 4; i++) {
     await h.run(1800, extra)
@@ -210,6 +210,32 @@ describe('trip controller: happy path', () => {
       'alarm:L1', 'vibrate:L1',
       'alarmStop', 'vibrate:stop', 'speak:takeBreak',
     ])
+    // One episode in the trip's alert log, at its highest level (T12).
+    expect(h.ctl.getSnapshot().alerts).toEqual([{ id: 1, atSec: expect.any(Number), family: 'L', level: 'L3' }])
+  })
+
+  it('logs each alarm episode for the summary, and a new trip starts with an empty log', async () => {
+    const h = harness()
+    await toMonitoring(h)
+    await h.run(1300, { ear: 0.05, blink: 0.95 })
+    await h.run(3000)
+    await h.run(1300, { ear: 0.05, blink: 0.95 })
+    await h.run(3000)
+    expect(h.ctl.getSnapshot().alerts.map((a) => `${a.id}:${a.family}:${a.level}`)).toEqual(['1:L:L1', '2:L:L1'])
+    h.ctl.endTrip()
+    await h.run(100)
+    h.ctl.reset()
+    expect(h.ctl.getSnapshot().alerts).toEqual([])
+  })
+
+  it('uses the config given at start (personal adaptation, T12)', async () => {
+    const h = harness()
+    const relaxed: Config = { ...DEFAULT_CONFIG, microsleep: { ...DEFAULT_CONFIG.microsleep, l1Ms: 1400 } }
+    await toMonitoring(h, {}, relaxed)
+    const before = h.calls.length
+    await h.run(1200, { ear: 0.05, blink: 0.95 })
+    await h.run(3000)
+    expect(h.calls.slice(before).filter((c) => c.startsWith('alarm'))).toEqual([])
   })
 
   it('end trip stops camera, engine and wake lock and shows the summary', async () => {

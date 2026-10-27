@@ -141,6 +141,16 @@ function evaluate(exp: Expectation, effects: readonly TimedEffect[], marks: Read
         ? `${exp.family} alarm too late: ${((late.t - from) / 1000).toFixed(1)}s after ${exp.after ?? 'start'} (limit ${exp.within / 1000}s)`
         : `missing ${exp.family} alarm after ${exp.after ?? 'start'}`
     }
+    case 'level': {
+      const from = at(exp.after, 0)
+      if (from === null) return `unknown mark ${exp.after}`
+      const hit = alarms.find((a) => a.level === exp.level && a.t >= from && a.t <= from + exp.within)
+      if (hit) return null
+      const late = alarms.find((a) => a.level === exp.level && a.t > from)
+      return late
+        ? `${exp.level} too late: ${((late.t - from) / 1000).toFixed(1)}s after ${exp.after ?? 'start'} (limit ${exp.within / 1000}s)`
+        : `missing ${exp.level} after ${exp.after ?? 'start'}`
+    }
     case 'noLevel': {
       const bad = alarms.find((a) => a.level === exp.level)
       return bad ? `unexpected ${exp.level} at ${(bad.t / 1000).toFixed(1)}s` : null
