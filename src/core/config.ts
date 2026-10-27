@@ -308,8 +308,8 @@ export interface SpeedConfig {
 export interface PoseConfig {
   /**
    * `(pitch − baseline) × headDownSign > 0` means "head down".
-   * −1 assumes MediaPipe pitch goes negative when nodding down. Confirm on a
-   * real device in Debug mode (SPEC §17.1); flip to 1 if it is the other way.
+   * +1: MediaPipe pitch goes positive when nodding down. Measured on a real
+   * clip (P7 SIGNS: +33° for a chin-to-chest tilt). Mirroring does not change it.
    */
   headDownSign: 1 | -1;
   /**
@@ -568,7 +568,7 @@ export const DEFAULT_CONFIG: Readonly<Config> = Object.freeze<Config>({
     turnMaxMs: 4 * SECOND,
   },
   pose: {
-    headDownSign: -1,
+    headDownSign: 1,
     yawRightSign: 1,
     gazeXRightSign: -1,
     levelDeg: 5,

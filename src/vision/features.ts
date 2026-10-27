@@ -166,8 +166,8 @@ const DEG = 180 / Math.PI
  * Head pose from MediaPipe's 4×4 facial transformation matrix
  * (column-major, as in MediaPipe's MatrixData). Returns null for bad input.
  *
- * Sign convention (to confirm on device in Debug mode, see SPEC §8.3):
- * pitch < 0 = head down, yaw = turn left/right, roll = tilt.
+ * Sign convention: pitch > 0 = head down (measured on a real clip, P7),
+ * yaw = turn left/right (to confirm on device), roll = tilt.
  */
 export function poseFromMatrix(data: readonly number[]): Pose | null {
   if (data.length !== 16 || data.some((v) => !Number.isFinite(v))) return null

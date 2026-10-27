@@ -390,6 +390,17 @@ Built so far:
 
 Recording list and instructions: [P7_RECORDING_GUIDE.md](P7_RECORDING_GUIDE.md).
 
+**First real clips (Mac webcam, desk):**
+- SIGNS: head down measured **+33° pitch**, so `pose.headDownSign` was wrong (−1 was a guess)
+  and is now **+1**. Pitch is a rotation about the X axis, so mirroring cannot change it: this
+  holds for every phone. Eyes right and eyes down (blendshape) confirmed the current signs.
+  Head right was "not recorded" (turned too far, face lost?) — still to confirm.
+- R01 (eyes closed 3 s) passes: L1 → L2 → L3 within the limits.
+- C01 and B01 failed because of the wrong sign: a look down read as a look up, so the
+  down-gaze lid correction (T8) and the lap zone never applied, and lowered lids raised L
+  alarms. To re-run after the fix. Synthetic scenarios do not change (they map directions
+  through the signs); the real-model trip replay still gives L1 → L2 → L3.
+
 ## 5. Safety rules for every change
 
 1. A fix that removes false alerts must not remove a real one. Every relaxation (T1, T2, T5, T7) has a "guard" case in group B.

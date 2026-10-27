@@ -11,6 +11,8 @@ import type { Effect, SessionState } from '../fsm/types.ts'
 import { createSignalPipeline, eyeOpenness } from './pipeline.ts'
 
 const cfg = DEFAULT_CONFIG
+/** Raw pitch for a head tilted `deg` degrees down, whatever the config sign is. */
+const down = (deg: number) => deg * cfg.pose.headDownSign
 const BASE: Baseline = { ...DEFAULT_BASELINE, earOpen: 0.3, earClosed: 0.06, approximate: false }
 const ctx = { armed: true, alarmActive: false }
 
@@ -75,8 +77,7 @@ describe('signal pipeline', () => {
 
   it('flags looking down: head down, or eyes down with head straight', () => {
     const p = createSignalPipeline(cfg, BASE)
-    // headDownSign = −1: negative pitch is "down".
-    expect(hold(p, 0, 300, { pitch: -25 }).signals.offRoad).toBe(true)
+    expect(hold(p, 0, 300, { pitch: down(25) }).signals.offRoad).toBe(true)
     expect(hold(p, 400, 300, { gazeY: -0.7 }).signals.offRoad).toBe(true)
     expect(hold(p, 800, 300, { gazeY: -0.2 }).signals.offRoad).toBe(false)
   })
@@ -96,8 +97,8 @@ describe('signal pipeline', () => {
 
   it('reports head drop for degraded mode', () => {
     const p = createSignalPipeline(cfg, BASE)
-    expect(p.update(processed(0, { pitch: -20 }), ctx).signals.headDropped).toBe(true)
-    expect(p.update(processed(66, { pitch: -5 }), ctx).signals.headDropped).toBe(false)
+    expect(p.update(processed(0, { pitch: down(20) }), ctx).signals.headDropped).toBe(true)
+    expect(p.update(processed(66, { pitch: down(5) }), ctx).signals.headDropped).toBe(false)
   })
 
   it('passes the arming flag through', () => {
@@ -172,9 +173,8 @@ describe('end to end: camera numbers → alerts', () => {
 
 describe('face lost: why? (T15)', () => {
   const lost = { faceFound: false }
-  // Signs: DEFAULT_CONFIG.pose.headDownSign = -1 (pitch below baseline = down), yawRightSign = 1.
   it('a fast head drop just before the loss counts as closed eyes (D03)', () => {
-    const r = drive([{ ms: 3000 }, { ms: 140, spec: { pitch: -15 } }, { ms: 140, spec: { pitch: -30 } }, { ms: 2500, spec: lost }])
+    const r = drive([{ ms: 3000 }, { ms: 140, spec: { pitch: down(15) } }, { ms: 140, spec: { pitch: down(30) } }, { ms: 2500, spec: lost }])
     expect(r.effects[0]).toBe('alarm:L1')
   })
 
@@ -261,7 +261,7 @@ describe('P4: drowsy eyes that are not closed', () => {
   })
 
   it('heavy lids with the head tilted down are not trusted (C09)', () => {
-    expect(drive([{ ms: 1000 }, { ms: 6000, spec: { ...heavyLids, pitch: -10 } }]).effects).toEqual([])
+    expect(drive([{ ms: 1000 }, { ms: 6000, spec: { ...heavyLids, pitch: down(10) } }]).effects).toEqual([])
   })
 
   it('heavy lids while looking down (phone, speedometer) are not drowsy', () => {
@@ -286,14 +286,14 @@ describe('P4: fatigue nods need drowsy eyes (T11)', () => {
   it('head drops and comes back with open eyes (bump, phone glance): no fatigue', () => {
     const p = createSignalPipeline(cfg, BASE)
     let fatigue = 'NONE'
-    for (const f of framesFrom([{ ms: 1000 }, ...nodTo(-20)])) fatigue = p.update(f, ctx).signals.fatigue
+    for (const f of framesFrom([{ ms: 1000 }, ...nodTo(down(20))])) fatigue = p.update(f, ctx).signals.fatigue
     expect(fatigue).toBe('NONE')
   })
 
   it('the same drop with closed eyes is a fatigue nod', () => {
     const p = createSignalPipeline(cfg, BASE)
     let fatigue = 'NONE'
-    for (const f of framesFrom([{ ms: 1000 }, ...nodTo(-20, closed)])) fatigue = p.update(f, ctx).signals.fatigue
+    for (const f of framesFrom([{ ms: 1000 }, ...nodTo(down(20), closed)])) fatigue = p.update(f, ctx).signals.fatigue
     expect(fatigue).toBe('ADVISORY')
   })
 })
