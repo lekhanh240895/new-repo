@@ -1155,3 +1155,21 @@ button.primary:disabled {
   padding: 0.25rem 0.65rem;
   font-size: 0.7rem;
 }
+
+/* The trip screens are phone-sized; the Debug tab needs the room on a desktop. */
+.app.app-wide {
+  max-width: 80rem;
+}
+
+.debug button.primary {
+  display: inline-block;
+  width: auto;
+  min-height: 3rem;
+  padding: 0 1.5rem;
+  font-size: 1rem;
+}
+
+.debug .row button {
+  width: auto;
+  margin: 0;
+}

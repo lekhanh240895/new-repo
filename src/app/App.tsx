@@ -25,7 +25,7 @@ export function App() {
   const { lang, t } = useLang()
   const devTools = devToolsEnabled()
   return (
-    <main className="app">
+    <main className={`app ${tab === 'debug' ? 'app-wide' : ''}`}>
       <header className="app-header">
         <div className="brand">
           <span className="brand-mark"><LogoIcon size={22} /></span>
