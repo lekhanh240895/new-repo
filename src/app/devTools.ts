@@ -6,5 +6,5 @@
 export function devToolsEnabled(): boolean {
   if (import.meta.env.DEV) return true
   const params = new URLSearchParams(window.location.search)
-  return params.has('debug') || params.has('test') || params.has('replay')
+  return params.has('debug') || params.has('test') || params.has('replay') || params.has('ui')
 }

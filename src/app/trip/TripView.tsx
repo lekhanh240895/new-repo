@@ -6,6 +6,7 @@ import { requestMotionPermission } from '../../platform/motion.ts'
 import { loadPersonal, resetPersonal, savePersonal } from '../../platform/personalStore.ts'
 import { requestNotificationPermission } from '../../platform/notify.ts'
 import { devToolsEnabled } from '../devTools.ts'
+import { AlertIcon, CameraIcon, CheckIcon, EyeIcon, EyeOffIcon, LogoIcon, MoonIcon } from '../Icons.tsx'
 import { useLang, type TextKey } from '../i18n.ts'
 import { installUpdate, usePwaState } from '../pwa.ts'
 import type { AlertRecord, TripSnapshot } from './controller.ts'
@@ -49,7 +50,8 @@ function SetupChecklist({ snap, t }: { snap: TripSnapshot; t: (k: TextKey) => st
   const { setup } = snap
   const item = (ok: boolean, key: TextKey) => (
     <li className={ok ? 'ok' : 'pending'}>
-      {ok ? '✓' : '…'} {t(key)}
+      <span className="tick">{ok ? <CheckIcon size={16} /> : null}</span>
+      {t(key)}
     </li>
   )
   return (
@@ -217,6 +219,11 @@ export function TripView() {
               <button type="button" onClick={installUpdate}>{t('idle.updateNow')}</button>
             </div>
           )}
+          <div className="hero">
+            <span className="hero-icon"><LogoIcon size={40} /></span>
+            <h2>{t('idle.heroTitle')}</h2>
+            <p>{t('idle.tagline')}</p>
+          </div>
           <article className="card disclaimer">
             <p><strong>{t('idle.disclaimerTitle')}</strong> {t('idle.disclaimerBody')}</p>
             <p>{t('idle.limits')}</p>
@@ -276,6 +283,7 @@ export function TripView() {
 
       {phase === 'CALIBRATING' && (
         <div className="calibrating">
+          <span className="calib-icon"><CameraIcon size={36} /></span>
           <p className="big">{t('calib.prompt')}</p>
           {snap.calibration.attempt > 1 && snap.calibration.retryReason !== null && (
             <p className="hint">{t(`calib.retry.${snap.calibration.retryReason}`)}</p>
@@ -286,14 +294,19 @@ export function TripView() {
 
       {phase === 'MONITORING' && (
         <div className="cockpit">
-          <span className={`dot dot-${snap.hud}`} role="img" aria-label={t(`hud.${snap.hud}`)} />
           <div className="cockpit-center">
-            {isAlarm(alert) && (
-              <div className="alarm-panel" role="alert">
+            {isAlarm(alert) ? (
+              <div className={`alarm-panel alarm-${alert.startsWith('D') ? 'look' : 'sleep'}`} role="alert">
+                <span className="alarm-icon">{alert.startsWith('D') ? <AlertIcon size={44} /> : <MoonIcon size={44} />}</span>
                 <p className="alarm-text">{t(`alarm.${alert}`)}</p>
                 <button type="button" className="primary" onClick={() => controller.ackAwake()}>
                   {t('alarm.ack')}
                 </button>
+              </div>
+            ) : (
+              <div className={`orb orb-${snap.hud}`} role="status">
+                <span className="orb-core">{snap.hud === 'off' ? <EyeOffIcon size={34} /> : <EyeIcon size={34} />}</span>
+                <p className="orb-label">{t(`hud.${snap.hud}`)}</p>
               </div>
             )}
             {!isAlarm(alert) && snap.hud === 'off' && <p className="cockpit-note" role="status">{t('cockpit.notMonitoring')}</p>}
@@ -331,7 +344,7 @@ export function TripView() {
             {!snap.faultGaveUp && (
               <button type="button" className="primary" onClick={() => controller.retry()}>{t('fault.retry')}</button>
             )}
-            <button type="button" onClick={() => controller.endTrip()}>{t('fault.end')}</button>
+            <button type="button" className="secondary outline" onClick={() => controller.endTrip()}>{t('fault.end')}</button>
           </div>
         </div>
       )}

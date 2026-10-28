@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { DebugView } from './debug/DebugView.tsx'
 import { devToolsEnabled } from './devTools.ts'
+import { LogoIcon } from './Icons.tsx'
 import { setLang, useLang, type Lang } from './i18n.ts'
 import { TripView } from './trip/TripView.tsx'
 
@@ -26,7 +27,10 @@ export function App() {
   return (
     <main className="app">
       <header className="app-header">
-        <h1>{t('app.title')}</h1>
+        <div className="brand">
+          <span className="brand-mark"><LogoIcon size={22} /></span>
+          <h1>{t('app.title')}</h1>
+        </div>
         <div className="lang" role="group" aria-label={t('lang.label')}>
           {LANGS.map((l) => (
             <button key={l.code} type="button" aria-pressed={lang === l.code} onClick={() => setLang(l.code)}>
