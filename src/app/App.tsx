@@ -40,7 +40,14 @@ export function App() {
           {t('tab.debug')}
         </button>
       </nav>
-      {tab === 'trip' ? <TripView /> : <DebugView />}
+      {tab === 'trip' ? <TripView /> : <DebugView
+          onBehaviorTest={() => {
+            const url = new URL(window.location.href)
+            url.searchParams.set('test', '1')
+            window.history.replaceState(null, '', url)
+            setTab('trip')
+          }}
+        />}
     </main>
   )
 }

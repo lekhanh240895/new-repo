@@ -507,3 +507,65 @@ body.immersive .tabs {
 .trip.alarm-strong .cockpit-footer .hold {
   color: var(--fg);
 }
+
+.readouts dt small {
+  display: block;
+  margin-top: 0.15rem;
+  font-size: 0.65rem;
+  line-height: 1.25;
+}
+
+.chart-box > p {
+  margin: 0.25rem 0 0;
+}
+
+/* Developer behavior check (?test): readable on the dark cockpit screen. */
+.test-panel {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  background: #111;
+  border: 1px solid #333;
+  border-radius: 0.5rem;
+  color: #ddd;
+  font-size: 0.85rem;
+}
+
+.test-panel h3,
+.test-panel h4 {
+  margin: 0;
+}
+
+.test-grid {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+}
+
+.test-grid dt {
+  color: var(--muted);
+  font-size: 0.7rem;
+}
+
+.test-grid dd {
+  margin: 0;
+}
+
+.test-panel .good {
+  color: #2fbf71;
+}
+
+.test-panel .bad {
+  color: #f4a261;
+}
+
+.test-panel .verdict {
+  padding: 0.5rem;
+  border: 1px solid currentColor;
+  border-radius: 0.375rem;
+}
+
+.test-panel ul {
+  margin: 0;
+  padding-left: 1.1rem;
+}

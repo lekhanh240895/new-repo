@@ -66,6 +66,7 @@ const en = {
   'hud.off': 'Not monitoring',
   'hud.alarm': 'Alarm',
 
+  'cockpit.parked': 'Car looks parked: look-away alarms are off.',
   'cockpit.noSound': 'Sound is blocked: visual alerts only.',
   'cockpit.approx': 'Calibration is approximate.',
   'cockpit.recalibrate': 'Phone moved? Re-calibrate',
@@ -179,6 +180,7 @@ const vi: Record<TextKey, string> = {
   'hud.off': 'Không giám sát',
   'hud.alarm': 'Báo động',
 
+  'cockpit.parked': 'Xe có vẻ đang đỗ: báo động nhìn lệch đang tắt.',
   'cockpit.noSound': 'Âm thanh bị chặn: chỉ cảnh báo bằng hình.',
   'cockpit.approx': 'Hiệu chuẩn chưa hoàn toàn chính xác.',
   'cockpit.recalibrate': 'Điện thoại bị lệch? Hiệu chuẩn lại',

@@ -294,6 +294,9 @@ export function createTripController(deps: TripDeps, baseCfg: Config = DEFAULT_C
       case 'alarm':
         recordAlarm(e.level)
         deps.audio.startAlarm(e.level)
+        // Looking away: say what to do. Drowsy alarms (L) stay tones only: a siren wakes better than words.
+        if (e.level === 'D1') deps.audio.speak('lookAtRoad')
+        else if (e.level === 'D2') deps.audio.speak('focusDriving')
         deps.vibrate(e.level)
         publish({ audioReady: deps.audio.isReady() })
         return

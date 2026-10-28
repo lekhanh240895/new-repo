@@ -7,7 +7,7 @@ import type { AlarmLevel, ChimeKind, SpokenMessage } from '../core/fsm/types.ts'
 
 export type VoiceLang = 'en' | 'vi'
 
-export type VoiceMessage = SpokenMessage | 'calibrate' | 'batteryLow'
+export type VoiceMessage = SpokenMessage | 'calibrate' | 'batteryLow' | 'lookAtRoad' | 'focusDriving'
 
 export interface AudioEngine {
   /** Call inside a tap handler (browsers block audio until a user gesture). Returns false if audio is unavailable. */
@@ -31,6 +31,8 @@ export const SPOKEN_TEXT: Record<VoiceLang, Record<VoiceMessage, string>> = {
     eyesHidden: 'Eyes not visible. Limited monitoring.',
     calibrate: 'Look at the road and blink normally.',
     batteryLow: 'Battery low. Please connect the charger.',
+    lookAtRoad: 'Please look at the road.',
+    focusDriving: 'Please focus on driving.',
   },
   vi: {
     fatigueAdvisory: 'Có dấu hiệu mệt mỏi. Hãy sớm nghỉ ngơi.',
@@ -39,6 +41,8 @@ export const SPOKEN_TEXT: Record<VoiceLang, Record<VoiceMessage, string>> = {
     eyesHidden: 'Không thấy mắt. Giám sát bị hạn chế.',
     calibrate: 'Hãy nhìn đường và chớp mắt bình thường.',
     batteryLow: 'Pin yếu. Hãy cắm sạc.',
+    lookAtRoad: 'Vui lòng nhìn đường.',
+    focusDriving: 'Vui lòng tập trung lái xe.',
   },
 }
 

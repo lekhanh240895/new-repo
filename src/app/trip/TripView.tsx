@@ -8,6 +8,7 @@ import { requestNotificationPermission } from '../../platform/notify.ts'
 import { useLang, type TextKey } from '../i18n.ts'
 import { installUpdate, usePwaState } from '../pwa.ts'
 import type { AlertRecord, TripSnapshot } from './controller.ts'
+import { TestPanel } from './TestPanel.tsx'
 import { useTrip } from './useTrip.ts'
 
 const ACCEPT_KEY = 'biomonitor.accepted.v1'
@@ -198,6 +199,8 @@ export function TripView() {
   const [useLocation, setUseLocation] = useState(true)
   const [useMotion, setUseMotion] = useState(true)
   const [notify, setNotify] = useState(false)
+  // Developer behavior check (?test): live detector readouts and a pass/fail test for desk use.
+  const [testMode, setTestMode] = useState(() => new URLSearchParams(window.location.search).has('test'))
   const { phase } = snap.session
   const alert = snap.session.monitoring.alert
   const immersive = IMMERSIVE.has(phase)
@@ -221,7 +224,8 @@ export function TripView() {
     if (notify) void requestNotificationPermission()
     if (useMotion) void requestMotionPermission()
     controller.start(video, {
-      useLocation,
+      // Indoors there is no speed, and a still phone then reads as a parked car: test mode skips it.
+      useLocation: useLocation && !testMode,
       useMotion,
       notifyWhenPaused: notify,
       preferGpu: params.get('delegate') !== 'cpu',
@@ -281,6 +285,10 @@ export function TripView() {
             <input type="checkbox" checked={notify} onChange={(e) => setNotify(e.target.checked)} />
             {t('idle.notify')}
           </label>
+          <label className="toggle">
+            <input type="checkbox" checked={testMode} onChange={(e) => setTestMode(e.target.checked)} />
+            {lang === 'vi' ? 'Bảng kiểm tra hành vi (khi test tại bàn, tự tắt vị trí)' : 'Behavior check panel (desk testing, location off)'}
+          </label>
           <button type="button" className="primary" onClick={start} disabled={!accepted}>
             {t('idle.start')}
           </button>
@@ -321,6 +329,7 @@ export function TripView() {
                 {t(alert === 'STRONG_ADVISORY' ? 'advisory.strong' : 'advisory.normal')}
               </p>
             )}
+            {(snap.debug?.speedClass === 'maneuver' || snap.debug?.speedClass === 'stopped') && <p className="hint">{t('cockpit.parked')}</p>}
             {!snap.audioReady && <p className="hint">{t('cockpit.noSound')}</p>}
             {snap.batteryLow && <p className="hint">{t('cockpit.battery')}</p>}
             {snap.needsRecalibration && !snap.recalibrating && (
@@ -328,6 +337,7 @@ export function TripView() {
             )}
             {snap.recalibrating && <p className="cockpit-note">{t('cockpit.recalibrating')}</p>}
           </div>
+          {testMode && <TestPanel snap={snap} lang={lang} />}
           <div className="cockpit-footer">
             {snap.calibration.approximate && <p className="cockpit-note small">{t('cockpit.approx')}</p>}
             {snap.mountWarning && <p className="cockpit-note small">{t('cockpit.mountSide')}</p>}

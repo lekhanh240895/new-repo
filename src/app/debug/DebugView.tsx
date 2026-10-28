@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type RefObject } from 'react'
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { DEFAULT_CONFIG } from '../../core/config.ts'
 import { startSpeedMonitor } from '../../platform/speed.ts'
 import { useLang } from '../i18n.ts'
@@ -44,8 +44,67 @@ const PERF_SERIES: Series[] = [
 const ZERO_GUIDE = [0]
 const POSE_GUIDES = [-20, 0, 20]
 
+type Lang = 'vi' | 'en'
+type Entry = readonly [label: string, hint: string]
+
+/** Each readout and chart: a plain name and what it means / what to expect. */
+const WORDS: Record<Lang, Record<string, Entry>> = {
+  vi: {
+    sensor: ['Trạng thái cảm biến', 'OK = thấy mặt rõ. Khác OK = mặt mất, quá tối, quá sáng hoặc rung'],
+    fps: ['Khung hình/giây', 'Từ 10 trở lên là ổn; thấp hơn thì app xử lý chậm'],
+    infer: ['Thời gian nhận diện (ms)', 'Mỗi khung mất bao lâu; dưới 60 là tốt'],
+    luma: ['Độ sáng mặt', 'Khoảng 60–200 là đủ sáng; dưới 40 quá tối'],
+    area: ['Kích thước mặt', 'Phần khung hình mặt chiếm; khoảng 0.1–0.4 là tốt'],
+    jitter: ['Độ rung', 'Càng nhỏ càng ổn định; số lớn = điện thoại rung'],
+    ear: ['Độ mở mắt trái / phải (EAR)', 'Mở ~0.25–0.35; nhắm ~0.1 trở xuống'],
+    blink: ['Chớp mắt', '0 = mở, 1 = nhắm hẳn'],
+    pose: ['Góc đầu: gật / quay / nghiêng (độ)', 'Gật: dương = cúi xuống. Quay: âm = quay phải, dương = quay trái (so với lúc calibrate)'],
+    cEye: ['Độ mở mắt (EAR)', 'Hai đường tụt xuống gần 0 khi nhắm mắt'],
+    cBlink: ['Chớp mắt (blendshape)', 'Hai đường vọt lên gần 1 khi nhắm mắt'],
+    cMouth: ['Miệng', 'Lên cao khi há miệng (ngáp, nói chuyện)'],
+    cPose: ['Góc đầu (độ)', 'pitch = gật (dương là cúi) · yaw = quay trái/phải · roll = nghiêng đầu'],
+    cGaze: ['Hướng nhìn của mắt', 'iris và blend nên đi cùng chiều; lệch nhau thì mắt đang không ổn'],
+    cPerf: ['Hiệu năng', 'infer ms = thời gian nhận diện; fps = khung hình mỗi giây'],
+  },
+  en: {
+    sensor: ['Sensor state', 'OK = face clearly seen. Anything else = face lost, too dark, glare or shake'],
+    fps: ['Frames per second', '10 or more is fine; lower means the app is slow'],
+    infer: ['Detection time (ms)', 'How long one frame takes; under 60 is good'],
+    luma: ['Face brightness', 'About 60–200 is bright enough; under 40 is too dark'],
+    area: ['Face size', 'Share of the picture the face fills; about 0.1–0.4 is good'],
+    jitter: ['Shake', 'Smaller is steadier; a big number means the phone shakes'],
+    ear: ['Eye openness left / right (EAR)', 'Open ~0.25–0.35; closed ~0.1 or less'],
+    blink: ['Blink', '0 = open, 1 = fully closed'],
+    pose: ['Head angle: nod / turn / tilt (°)', 'Nod: positive = looking down. Turn: negative = right, positive = left (from calibration)'],
+    cEye: ['Eye openness (EAR)', 'Both lines drop near 0 when the eyes close'],
+    cBlink: ['Blink (blendshape)', 'Both lines jump near 1 when the eyes close'],
+    cMouth: ['Mouth', 'Rises when the mouth opens (yawn, talking)'],
+    cPose: ['Head angle (°)', 'pitch = nod (positive is down) · yaw = turn left/right · roll = head tilt'],
+    cGaze: ['Eye direction', 'iris and blend should move together; if not, the eyes are unreliable'],
+    cPerf: ['Performance', 'infer ms = detection time; fps = frames per second'],
+  },
+}
+
 function fmt(v: number | undefined, digits = 2): string {
   return v === undefined || !Number.isFinite(v) ? '–' : v.toFixed(digits)
+}
+
+function Readout({ entry, children }: { entry: Entry; children: ReactNode }) {
+  return (
+    <div>
+      <dt>{entry[0]}<small className="muted">{entry[1]}</small></dt>
+      <dd>{children}</dd>
+    </div>
+  )
+}
+
+function Chart({ entry, children }: { entry: Entry; children: ReactNode }) {
+  return (
+    <div className="chart-box">
+      {children}
+      <p className="muted small">{entry[1]}</p>
+    </div>
+  )
 }
 
 /** Draws the debug landmarks over the (mirrored) video. */
@@ -86,12 +145,14 @@ function useOverlay(samplesRef: RefObject<Sample[]>) {
  * Developer view: camera preview, landmarks and live signal charts (SPEC §16 item 8).
  * For a parked car or a desk only — it is deliberately busy.
  */
-export function DebugView() {
+export function DebugView({ onBehaviorTest }: { onBehaviorTest?: () => void }) {
   const { videoRef, samplesRef, status, backend, error, start, stop } = useVisionPipeline(true)
   const overlayRef = useOverlay(samplesRef)
   const [latest, setLatest] = useState<Sample | undefined>(undefined)
   const [stoppedMoving, setStoppedMoving] = useState(false)
-  const { t } = useLang()
+  const { t, lang } = useLang()
+  const w = WORDS[lang]
+  const word = (k: string): Entry => w[k] ?? [k, '']
 
   // Readouts refresh 4× per second; charts redraw every frame on their own.
   useEffect(() => {
@@ -133,6 +194,13 @@ export function DebugView() {
   return (
     <section className="debug">
       <p className="banner">{t('debug.banner')}</p>
+      {onBehaviorTest !== undefined && (
+        <p>
+          <button type="button" className="primary" onClick={onBehaviorTest}>
+            {lang === 'vi' ? 'Kiểm tra hành vi và nghe cảnh báo (có chấm đúng/sai)' : 'Test behaviors and hear alerts (with pass/fail)'}
+          </button>
+        </p>
+      )}
       {stoppedMoving && <p className="error" role="alert">{t('debug.moving')}</p>}
 
       <div className="row">
@@ -155,24 +223,24 @@ export function DebugView() {
       </div>
 
       <dl className="readouts">
-        <div><dt>sensor</dt><dd>{latest?.sensor ?? '–'}{latest && !latest.frameValid ? ' (invalid)' : ''}</dd></div>
-        <div><dt>fps</dt><dd>{fmt(latest?.fps, 1)}</dd></div>
-        <div><dt>infer ms</dt><dd>{fmt(latest?.raw.inferMs, 1)}</dd></div>
-        <div><dt>face luma</dt><dd>{fmt(latest?.raw.quality.faceLuma, 0)}</dd></div>
-        <div><dt>face area</dt><dd>{fmt(latest?.raw.quality.faceAreaRatio, 3)}</dd></div>
-        <div><dt>jitter</dt><dd>{fmt(latest?.raw.quality.landmarkJitter, 4)}</dd></div>
-        <div><dt>EAR L / R</dt><dd>{fmt(latest?.smooth.eye?.earL)} / {fmt(latest?.smooth.eye?.earR)}</dd></div>
-        <div><dt>blink</dt><dd>{fmt(latest?.smooth.eye && avg(latest.smooth.eye.blinkL, latest.smooth.eye.blinkR))}</dd></div>
-        <div><dt>pitch / yaw / roll</dt><dd>{fmt(latest?.smooth.pose?.pitchDeg, 0)} / {fmt(latest?.smooth.pose?.yawDeg, 0)} / {fmt(latest?.smooth.pose?.rollDeg, 0)}</dd></div>
+        <Readout entry={word('sensor')}>{latest?.sensor ?? '–'}{latest && !latest.frameValid ? ' (invalid)' : ''}</Readout>
+        <Readout entry={word('fps')}>{fmt(latest?.fps, 1)}</Readout>
+        <Readout entry={word('infer')}>{fmt(latest?.raw.inferMs, 1)}</Readout>
+        <Readout entry={word('luma')}>{fmt(latest?.raw.quality.faceLuma, 0)}</Readout>
+        <Readout entry={word('area')}>{fmt(latest?.raw.quality.faceAreaRatio, 3)}</Readout>
+        <Readout entry={word('jitter')}>{fmt(latest?.raw.quality.landmarkJitter, 4)}</Readout>
+        <Readout entry={word('ear')}>{fmt(latest?.smooth.eye?.earL)} / {fmt(latest?.smooth.eye?.earR)}</Readout>
+        <Readout entry={word('blink')}>{fmt(latest?.smooth.eye && avg(latest.smooth.eye.blinkL, latest.smooth.eye.blinkR))}</Readout>
+        <Readout entry={word('pose')}>{fmt(latest?.smooth.pose?.pitchDeg, 0)} / {fmt(latest?.smooth.pose?.yawDeg, 0)} / {fmt(latest?.smooth.pose?.rollDeg, 0)}</Readout>
       </dl>
 
       <div className="charts">
-        <LiveChart title="Eye aspect ratio" samplesRef={samplesRef} series={EYE_SERIES} min={0} max={0.5} />
-        <LiveChart title="Blink (blendshape)" samplesRef={samplesRef} series={BLINK_SERIES} min={0} max={1} />
-        <LiveChart title="Mouth" samplesRef={samplesRef} series={MOUTH_SERIES} min={0} max={1} />
-        <LiveChart title="Head pose (°)" samplesRef={samplesRef} series={POSE_SERIES} min={-60} max={60} guides={POSE_GUIDES} />
-        <LiveChart title="Gaze" samplesRef={samplesRef} series={GAZE_SERIES} min={-1} max={1} guides={ZERO_GUIDE} />
-        <LiveChart title="Performance" samplesRef={samplesRef} series={PERF_SERIES} min={0} max={60} />
+        <Chart entry={word('cEye')}><LiveChart title={word('cEye')[0]} samplesRef={samplesRef} series={EYE_SERIES} min={0} max={0.5} /></Chart>
+        <Chart entry={word('cBlink')}><LiveChart title={word('cBlink')[0]} samplesRef={samplesRef} series={BLINK_SERIES} min={0} max={1} /></Chart>
+        <Chart entry={word('cMouth')}><LiveChart title={word('cMouth')[0]} samplesRef={samplesRef} series={MOUTH_SERIES} min={0} max={1} /></Chart>
+        <Chart entry={word('cPose')}><LiveChart title={word('cPose')[0]} samplesRef={samplesRef} series={POSE_SERIES} min={-60} max={60} guides={POSE_GUIDES} /></Chart>
+        <Chart entry={word('cGaze')}><LiveChart title={word('cGaze')[0]} samplesRef={samplesRef} series={GAZE_SERIES} min={-1} max={1} guides={ZERO_GUIDE} /></Chart>
+        <Chart entry={word('cPerf')}><LiveChart title={word('cPerf')[0]} samplesRef={samplesRef} series={PERF_SERIES} min={0} max={60} /></Chart>
       </div>
     </section>
   )

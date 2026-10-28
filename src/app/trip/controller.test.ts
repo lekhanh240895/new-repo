@@ -498,6 +498,8 @@ describe('trip controller: P2 context (speed, motion, mount)', () => {
     h.setTurn(0)
     await h.run(2500, { yaw: right(45) })
     expect(h.calls.some((c) => c.startsWith('alarm:D'))).toBe(true)
+    // A look-away alarm tells the driver what to do; the tone alone is not enough.
+    expect(h.calls).toContain('speak:lookAtRoad')
   })
 
   it('stops the motion monitor at the end of the trip', async () => {

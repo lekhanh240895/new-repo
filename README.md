@@ -43,6 +43,74 @@ A trip goes: **Start** → setup check (face, light, distance, beep) → 8 s cal
   flow — including camera loss, stalls and app switching — is tested in Node with fakes.
 - How each of the 20 failure modes is handled and tested: [`docs/FAILURE_MODES.md`](docs/FAILURE_MODES.md).
 
+## Alert behavior (current rules)
+
+Defaults from `src/core/config.ts`; the spec has the reasoning (§10, §11). Gaze = head angle plus
+eye direction. Yaw: left is negative, right is positive.
+
+**Where you look → how long before D1 (distraction alarm)**
+
+| You look at | Gaze zone (yaw / pitch) | Time before D1 | Counts toward 6 s in 30 s |
+| --- | --- | --- | --- |
+| The road, or up | yaw within ±30° and pitch above −15° | never | no |
+| Left mirror | yaw −30° to −60° | 2.5 s | no |
+| Left window / behind | yaw beyond −60° | 2.0 s | no |
+| Right mirror | yaw 50° to 75° | 2.5 s | no |
+| Right window (30–50° or beyond 75°) | the rest of the right side | 2.0 s | no |
+| Rear-view mirror | yaw 18° to 45°, pitch above +8° | 3.0 s | no |
+| Speedometer | pitch below −15°, yaw within ±20° | 2.0 s | no |
+| Console / radio | pitch below −15°, yaw 10° to 40° | 2.0 s | yes |
+| Lap / phone | pitch below −30°, or any other low look | 2.0 s | yes |
+
+D2 follows 1.5 s after D1. A new zone must last 150 ms to count, so a flick is ignored. The
+attention buffer (2 s) refills while you look at the road, so short glances with road time
+between them never add up.
+
+**Context that changes the times**
+
+| Situation | Effect |
+| --- | --- |
+| Speed 30 km/h or more (or no GPS) | The table above |
+| 10–30 km/h | Mirror and side looks get 3.5 s. Phone, console and lap stay 2.0 s |
+| Below 10 km/h | No distraction alarms, microsleep only. Below 3 km/h: no alarms at all |
+| Location ticked, but **no speed reading** (indoors, desk) and the phone very still for 3 s | Counts as parked (below 10 km/h): no distraction alarms, only microsleep (L) |
+| Location unticked | No speed class at all: always armed |
+| Car turning and you look into the turn | Allowed for up to 4 s |
+| Face lost after a fast head turn | Blind-spot check: D1 after 1.5 s |
+| Face lost after a fast head drop | Counted as eyes closed |
+| Eyes on phone 2 s while stopped, then the car moves | D1 at once |
+
+**Eyes closed, and what each alert does**
+
+| Alert | Trigger | Sound | Stops when |
+| --- | --- | --- | --- |
+| L1 | Eyes closed 1.0 s (heavy lids 3 s, 3 slow closures in 60 s) | Two soft tones | Eyes open and head level for 2 s |
+| L2 | Eyes closed 1.5 s | Rising chirp, repeats | L1 after 1 s with eyes open |
+| L3 | Eyes closed 2.0 s, or face lost in danger | Loud siren, red flash | L1 after 1 s with eyes open |
+| D1 | See the first table | Two soft tones | Back on the road for 1 s |
+| D2 | D1 plus 1.5 s, or 3.5 s off road, or more than 6 s of phone/console/lap in 30 s | Rising chirp | Back on the road for 1 s |
+| Advisory | PERCLOS above 15%, 6 slow blinks in 5 min, 3 yawns in 10 min, 1 nod in 5 min | Calm voice, once per 10 min | By itself |
+| Strong advisory | PERCLOS above 25%, 12 slow blinks, 5 yawns, 2 nods | Voice, once per 5 min | By itself |
+
+### Test the alerts at a desk
+
+The phone sits in a stand slightly above eye level. On the start screen:
+
+1. **Untick "Use location…".** With location off the app is always armed. If it stays ticked indoors,
+   there is no speed reading, a phone sitting still counts as parked, and distraction alarms (D1/D2)
+   stay silent while microsleep alarms (L) still fire. Motion sensors can stay on.
+2. Calibrate (8 s, look straight ahead, blink normally).
+3. Turn your head to the yaw in the table and hold it longer than its time. Look down at your lap or a
+   phone held below the camera for 2 s. Close your eyes for 1 s, then 2 s.
+
+Easier: tick **"Behavior check panel"** on the start screen (or open `?test`, or press the button in the
+Debug tab). It turns location off for you and, during monitoring, shows the alarm state, where you look,
+head angle, eye openness, the attention buffer and an alert history. Pick an action, press *Start test*,
+do it, and it says whether the alarm matched what the rules expect.
+
+For the same cases without a person, run `npm run scenarios`. The Debug tab shows raw signals only
+(each with a plain-language note in English and Vietnamese).
+
 ## Develop
 
 Requires Node 22+.
