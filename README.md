@@ -237,6 +237,41 @@ The app is a folder of static files (`dist/`) and must be served over **HTTPS** 
 
 New versions are never applied in the middle of a trip: the start screen offers "Update now".
 
+### Use it on your phone
+
+Pick one. The camera only works over HTTPS.
+
+**A. Try it now, no deploy** (phone and computer on the same Wi-Fi):
+
+```bash
+npm run dev:phone
+```
+
+Open the `Network: https://…` address on the phone and accept the certificate warning.
+It stops when you close the terminal.
+
+**B. Keep it on the phone: Cloudflare Pages (free, recommended)**
+
+1. Push the repo to GitHub.
+2. Cloudflare dashboard → Workers & Pages → Create → Pages → Connect to Git → pick the repo.
+3. Build command `npm run build`, output folder `dist`, environment variable `NODE_VERSION` = `22`.
+4. Deploy. You get an `https://<name>.pages.dev` address. Each push to `main` redeploys.
+
+**C. GitHub Pages** (the page gets the CSP from a meta tag, the worker does not)
+
+1. Repo → Settings → Pages → Source: **GitHub Actions**.
+2. Actions → *Deploy to GitHub Pages* → Run workflow.
+3. The address is `https://<user>.github.io/<repo>/`.
+
+**On the phone**
+
+- Open the address once online, then *Add to Home Screen* (iPhone: Share → Add to Home Screen;
+  Android: menu → Install app). After the first load it works offline.
+- Allow the camera. Leave "Use location" ticked only when driving; indoors, use the behavior check panel.
+- Turn the media volume up. **iPhone: flip the ring switch to ring**; a silent switch can mute the tones
+  on older iOS (the app asks for a playback audio session, which fixes it on current iOS).
+- Keep the app open in the foreground with the screen on. Use a mount below eye level, camera on the face.
+
 ## Roadmap
 
 | Milestone | Scope |

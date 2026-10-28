@@ -83,6 +83,28 @@ const CHIMES: Record<ChimeKind | 'test' | 'speechFallback', Tone[]> = {
   speechFallback: [{ at: 0, dur: 0.2, freq: 587, gain: 0.25 }, { at: 0.25, dur: 0.3, freq: 784, gain: 0.25 }],
 }
 
+/** Half a second of silence as a WAV file (8 kHz, 8-bit, mono). */
+function silentWav(): ArrayBuffer {
+  const samples = 4000
+  const buf = new ArrayBuffer(44 + samples)
+  const v = new DataView(buf)
+  const str = (o: number, t: string) => [...t].forEach((c, i) => v.setUint8(o + i, c.charCodeAt(0)))
+  str(0, 'RIFF')
+  v.setUint32(4, 36 + samples, true)
+  str(8, 'WAVEfmt ')
+  v.setUint32(16, 16, true)
+  v.setUint16(20, 1, true)
+  v.setUint16(22, 1, true)
+  v.setUint32(24, 8000, true)
+  v.setUint32(28, 8000, true)
+  v.setUint16(32, 1, true)
+  v.setUint16(34, 8, true)
+  str(36, 'data')
+  v.setUint32(40, samples, true)
+  new Uint8Array(buf, 44).fill(128)
+  return buf
+}
+
 export interface AudioDeps {
   createContext?: () => AudioContext;
   speech?: SpeechSynthesis | null;
@@ -104,6 +126,33 @@ export function createAudioEngine(deps: AudioDeps = {}): AudioEngine {
   let alarmTimer: ReturnType<typeof setInterval> | null = null
   let alarmNodes: OscillatorNode[] = []
   let lang: VoiceLang = 'en'
+  /** The alarm that should be sounding (it may wait for the audio context to resume). */
+  let wanted: AlarmLevel | null = null
+  let silentAudio: HTMLAudioElement | null = null
+  let silentUrl: string | null = null
+
+  /**
+   * iPhones mute Web Audio when the ring switch is on silent, but not speech: the driver then
+   * hears only the voice. Declaring a "playback" audio session (or playing a silent media
+   * element, which does the same on older iOS) makes the tones audible too.
+   */
+  function enablePlaybackSession() {
+    try {
+      const session = (navigator as unknown as { audioSession?: { type: string } }).audioSession
+      if (session !== undefined) session.type = 'playback'
+    } catch {
+      // Not supported: the silent element below is the fallback.
+    }
+    if (silentAudio !== null || typeof Audio === 'undefined' || typeof URL.createObjectURL !== 'function') return
+    try {
+      silentUrl = URL.createObjectURL(new Blob([silentWav()], { type: 'audio/wav' }))
+      silentAudio = new Audio(silentUrl)
+      silentAudio.loop = true
+      void silentAudio.play().catch(() => {})
+    } catch {
+      silentAudio = null
+    }
+  }
 
   /** The phone's voice for `lang`, if it has one. */
   function voiceFor(l: VoiceLang): SpeechSynthesisVoice | null {
@@ -149,6 +198,11 @@ export function createAudioEngine(deps: AudioDeps = {}): AudioEngine {
     unlock() {
       try {
         ctx ??= makeContext()
+        enablePlaybackSession()
+        // Speech or a phone call can pause the audio context: bring it back while an alarm is wanted.
+        ctx.onstatechange = () => {
+          if (wanted !== null && ctx !== null && ctx.state !== 'running') void ctx.resume().catch(() => {})
+        }
         void ctx.resume().catch(() => {})
         if (keepAlive === null) {
           // A silent, never-ending source keeps the audio output awake between alerts.
@@ -169,21 +223,31 @@ export function createAudioEngine(deps: AudioDeps = {}): AudioEngine {
     isReady: ready,
     startAlarm(level) {
       engine.stopAlarm()
-      if (!ready() || ctx === null) return
-      const pattern = ALARM_PATTERNS[level]
-      let next = ctx.currentTime + 0.02
-      const scheduleCycle = () => {
-        if (ctx === null) return
-        // Schedule slightly ahead so timer jitter never leaves a gap.
-        while (next < ctx.currentTime + pattern.cycle) {
-          play(pattern.tones, Math.max(next, ctx.currentTime + 0.01), true)
-          next += pattern.cycle
+      wanted = level
+      if (ctx === null) return
+      const begin = () => {
+        if (wanted !== level || ctx === null) return
+        const pattern = ALARM_PATTERNS[level]
+        let next = ctx.currentTime + 0.02
+        const scheduleCycle = () => {
+          if (ctx === null) return
+          // A suspended context (after speech, a call, the screen lock) makes no sound: wake it.
+          if (ctx.state !== 'running') void ctx.resume().catch(() => {})
+          // Schedule slightly ahead so timer jitter never leaves a gap.
+          while (next < ctx.currentTime + pattern.cycle) {
+            play(pattern.tones, Math.max(next, ctx.currentTime + 0.01), true)
+            next += pattern.cycle
+          }
         }
+        scheduleCycle()
+        alarmTimer = setInterval(scheduleCycle, Math.max(100, (pattern.cycle * 1000) / 2))
       }
-      scheduleCycle()
-      alarmTimer = setInterval(scheduleCycle, Math.max(100, (pattern.cycle * 1000) / 2))
+      // resume() is asynchronous: start the alarm when it has finished, not only if it was already running.
+      if (ctx.state === 'running') begin()
+      else void ctx.resume().then(begin).catch(() => {})
     },
     stopAlarm() {
+      wanted = null
       if (alarmTimer !== null) clearInterval(alarmTimer)
       alarmTimer = null
       for (const n of alarmNodes) {
@@ -214,6 +278,10 @@ export function createAudioEngine(deps: AudioDeps = {}): AudioEngine {
         u.lang = VOICE_LOCALE[useLang]
         if (voice !== null && useLang === lang) u.voice = voice
         u.rate = 0.95
+        // Speech can cut the audio context off on a phone: bring it back for a running alarm.
+        u.onend = () => {
+          if (wanted !== null && ctx !== null) void ctx.resume().catch(() => {})
+        }
         speech.speak(u)
       } catch (err) {
         console.warn('BioMonitor: speech failed, using a tone', err)
@@ -228,6 +296,10 @@ export function createAudioEngine(deps: AudioDeps = {}): AudioEngine {
       speech?.cancel()
       keepAlive?.stop()
       keepAlive = null
+      silentAudio?.pause()
+      silentAudio = null
+      if (silentUrl !== null) URL.revokeObjectURL(silentUrl)
+      silentUrl = null
       void ctx?.close().catch(() => {})
       ctx = null
     },
