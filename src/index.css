@@ -1150,10 +1150,10 @@ button.primary:disabled {
 .app-header .lang > button {
   flex: 0 0 auto;
   width: auto;
-  min-width: 0;
-  min-height: 0;
-  padding: 0.25rem 0.65rem;
-  font-size: 0.7rem;
+  min-width: 2.75rem;
+  min-height: 2.5rem;
+  padding: 0.5rem 0.9rem;
+  font-size: 0.85rem;
 }
 
 /* The trip screens are phone-sized; the Debug tab needs the room on a desktop. */
