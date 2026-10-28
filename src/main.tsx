@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { App } from './app/App.tsx'
 import { registerServiceWorker } from './app/pwa.ts'
+import '@picocss/pico/css/pico.min.css'
 import './index.css'
 
 const rootElement = document.getElementById('root')

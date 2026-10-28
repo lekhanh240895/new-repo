@@ -73,7 +73,7 @@ const en = {
   'cockpit.recalibrating': 'Re-calibrating… look at the road.',
   'cockpit.battery': 'Battery low — connect the charger.',
   'cockpit.notMonitoring': "Not monitoring: can't see your face.",
-  'cockpit.end': 'Hold to end trip',
+  'cockpit.end': 'End trip',
   'cockpit.mountSide': 'The phone is far to the side. For better accuracy, move it toward the center.',
 
   'suspended': 'Monitoring paused. Come back to this app to continue.',
@@ -187,7 +187,7 @@ const vi: Record<TextKey, string> = {
   'cockpit.recalibrating': 'Đang hiệu chuẩn lại… hãy nhìn đường.',
   'cockpit.battery': 'Pin yếu — hãy cắm sạc.',
   'cockpit.notMonitoring': 'Không giám sát được: không thấy khuôn mặt.',
-  'cockpit.end': 'Giữ để kết thúc',
+  'cockpit.end': 'Kết thúc chuyến đi',
   'cockpit.mountSide': 'Điện thoại gắn quá lệch sang bên. Để chính xác hơn, hãy dời về gần giữa.',
 
   'suspended': 'Đã tạm dừng giám sát. Hãy quay lại ứng dụng để tiếp tục.',

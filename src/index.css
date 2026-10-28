@@ -34,18 +34,21 @@ body {
   gap: 0.75rem;
 }
 
-button {
-  min-height: 3rem;
-  padding: 0 1.25rem;
-  border: 1px solid var(--accent);
-  border-radius: 0.5rem;
-  background: transparent;
-  color: var(--fg);
-  font-size: 1rem;
+/* Pico CSS styles the controls; these variables give it the app's green accent. */
+:root {
+  --pico-primary: #2fbf71;
+  --pico-primary-background: #2fbf71;
+  --pico-primary-hover-background: #3ad17f;
+  --pico-primary-underline: rgba(47, 191, 113, 0.5);
+  --pico-primary-inverse: #04150b;
+  --pico-border-radius: 0.75rem;
+  --pico-form-element-spacing-vertical: 0.85rem;
+  --pico-form-element-spacing-horizontal: 1.1rem;
 }
 
-button:disabled {
-  opacity: 0.4;
+button,
+[role='button'] {
+  min-height: 3rem;
 }
 
 .tabs {
@@ -54,9 +57,19 @@ button:disabled {
   margin-bottom: 1rem;
 }
 
-.tabs button[aria-pressed='true'] {
-  background: var(--accent);
-  color: #000;
+.tabs button {
+  width: auto;
+  min-height: 2.5rem;
+  margin: 0;
+  padding: 0 1.1rem;
+  border-radius: 999px;
+  font-size: 0.9rem;
+}
+
+.tabs button[aria-pressed='false'] {
+  background: transparent;
+  border-color: #2a2a2a;
+  color: var(--muted);
 }
 
 .banner {
@@ -164,28 +177,83 @@ button:disabled {
   gap: 1rem;
 }
 
-.primary {
+button.primary {
+  display: block;
+  width: 100%;
   min-height: 3.5rem;
-  background: var(--accent);
-  color: #000;
+  margin: 0;
+  font-size: 1.05rem;
   font-weight: 600;
 }
 
-.disclaimer {
-  padding: 0.75rem 1rem;
-  border-left: 3px solid #f4a261;
-  background: rgba(244, 162, 97, 0.08);
+button.primary:disabled {
+  --pico-background-color: #1a1a1a;
+  --pico-border-color: #262626;
+  --pico-color: #6b6b6b;
+  opacity: 1;
+}
+
+.card {
+  margin: 0;
+  padding: 1rem 1.1rem;
+  border: 1px solid #1f1f1f;
+  border-radius: 1rem;
+  background: #0d0d0d;
+  box-shadow: none;
+}
+
+.card p {
+  margin: 0 0 0.6rem;
+}
+
+.card.disclaimer {
+  border-color: rgba(244, 162, 97, 0.35);
+  background: rgba(244, 162, 97, 0.06);
+}
+
+.accept {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0.4rem 0 0;
+  font-weight: 600;
+}
+
+.accept input {
+  margin: 0;
+}
+
+details.mount {
+  padding: 0;
+}
+
+details.mount summary {
+  padding: 0.9rem 1.1rem;
+  margin: 0;
+  font-weight: 600;
+}
+
+details.mount ol {
+  margin: 0;
+  padding: 0 1.1rem 1rem 2.4rem;
+  color: var(--muted);
+}
+
+.options {
+  display: grid;
+  gap: 0.9rem;
 }
 
 .toggle {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.75rem;
+  margin: 0;
 }
 
 .toggle input {
-  width: 1.25rem;
-  height: 1.25rem;
+  flex: none;
+  margin: 0;
 }
 
 .status,
@@ -401,27 +469,39 @@ button.link {
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
+  margin-bottom: 1rem;
 }
 
 .app-header h1 {
-  margin: 0.5rem 0 1rem;
-  font-size: 1.5rem;
+  margin: 0;
+  font-size: 1.35rem;
+  letter-spacing: -0.01em;
 }
 
 .lang {
-  display: flex;
-  gap: 0.25rem;
+  display: inline-flex;
+  padding: 0.2rem;
+  border: 1px solid #262626;
+  border-radius: 999px;
+  background: #0d0d0d;
 }
 
 .lang button {
-  min-height: 2.25rem;
-  padding: 0 0.6rem;
-  font-size: 0.85rem;
+  width: auto;
+  min-height: 2rem;
+  margin: 0;
+  padding: 0 0.85rem;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 600;
 }
 
 .lang button[aria-pressed='true'] {
   background: var(--accent);
-  color: #000;
+  color: #04150b;
 }
 
 .update {
@@ -568,4 +648,16 @@ body.immersive .tabs {
 .test-panel ul {
   margin: 0;
   padding-left: 1.1rem;
+}
+
+.end-trip {
+  width: 100%;
+  margin: 0;
+}
+
+.checklist {
+  padding: 1rem 1.1rem;
+  border: 1px solid #1f1f1f;
+  border-radius: 1rem;
+  background: #0d0d0d;
 }

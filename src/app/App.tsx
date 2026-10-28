@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { DebugView } from './debug/DebugView.tsx'
+import { devToolsEnabled } from './devTools.ts'
 import { setLang, useLang, type Lang } from './i18n.ts'
 import { TripView } from './trip/TripView.tsx'
 
@@ -7,6 +8,7 @@ type Tab = 'trip' | 'debug'
 
 function initialTab(): Tab {
   const params = new URLSearchParams(window.location.search)
+  if (!devToolsEnabled()) return 'trip'
   const tab = params.get('tab')
   if (tab === 'trip' || tab === 'debug') return tab
   return params.has('debug') || params.has('replay') ? 'debug' : 'trip'
@@ -20,6 +22,7 @@ const LANGS: readonly { code: Lang; label: string }[] = [
 export function App() {
   const [tab, setTab] = useState<Tab>(initialTab)
   const { lang, t } = useLang()
+  const devTools = devToolsEnabled()
   return (
     <main className="app">
       <header className="app-header">
@@ -32,6 +35,7 @@ export function App() {
           ))}
         </div>
       </header>
+      {devTools && (
       <nav className="tabs" aria-label="Views">
         <button type="button" aria-pressed={tab === 'trip'} onClick={() => setTab('trip')}>
           {t('tab.trip')}
@@ -40,6 +44,7 @@ export function App() {
           {t('tab.debug')}
         </button>
       </nav>
+      )}
       {tab === 'trip' ? <TripView /> : <DebugView
           onBehaviorTest={() => {
             const url = new URL(window.location.href)

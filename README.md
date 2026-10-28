@@ -125,6 +125,9 @@ npm run build      # production build
 
 ### Debug mode
 
+The Debug tab and the behavior check panel are developer tools: visible on `npm run dev`, hidden in
+production builds. On a deployed site add `?debug` (or `?test`) to the address to turn them on.
+
 Open the **Debug** tab (or `http://localhost:5173/?debug`) and tap **Start camera**.
 You get the camera preview with landmarks, live readouts and charts for EAR, blink,
 mouth, head pose, gaze and performance.

@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { DEFAULT_CONFIG } from '../../core/config.ts'
 import type { AlarmLevel, Phase } from '../../core/fsm/types.ts'
 import { atLimit, markFalseAlarm, personalize, scaleFor, type Personal } from '../../core/personal.ts'
 import { requestMotionPermission } from '../../platform/motion.ts'
 import { loadPersonal, resetPersonal, savePersonal } from '../../platform/personalStore.ts'
 import { requestNotificationPermission } from '../../platform/notify.ts'
+import { devToolsEnabled } from '../devTools.ts'
 import { useLang, type TextKey } from '../i18n.ts'
 import { installUpdate, usePwaState } from '../pwa.ts'
 import type { AlertRecord, TripSnapshot } from './controller.ts'
@@ -42,39 +43,6 @@ const ALARM_CLASS: Record<AlarmLevel, string> = {
 
 function isAlarm(level: string): level is AlarmLevel {
   return level in ALARM_CLASS
-}
-
-/** Press and hold to act: avoids ending a trip by accident while driving (SPEC §16). */
-function HoldButton({ onHold, children, ms = 800 }: { onHold: () => void; children: ReactNode; ms?: number }) {
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const [holding, setHolding] = useState(false)
-  const cancel = () => {
-    if (timer.current !== null) clearTimeout(timer.current)
-    timer.current = null
-    setHolding(false)
-  }
-  return (
-    <button
-      type="button"
-      className={`hold ${holding ? 'holding' : ''}`}
-      style={{ ['--hold-ms' as string]: `${ms}ms` }}
-      onPointerDown={() => {
-        setHolding(true)
-        timer.current = setTimeout(() => {
-          cancel()
-          onHold()
-        }, ms)
-      }}
-      onPointerUp={cancel}
-      onPointerLeave={cancel}
-      onPointerCancel={cancel}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') onHold()
-      }}
-    >
-      {children}
-    </button>
-  )
 }
 
 function SetupChecklist({ snap, t }: { snap: TripSnapshot; t: (k: TextKey) => string }) {
@@ -200,7 +168,8 @@ export function TripView() {
   const [useMotion, setUseMotion] = useState(true)
   const [notify, setNotify] = useState(false)
   // Developer behavior check (?test): live detector readouts and a pass/fail test for desk use.
-  const [testMode, setTestMode] = useState(() => new URLSearchParams(window.location.search).has('test'))
+  const devTools = devToolsEnabled()
+  const [testMode, setTestMode] = useState(() => devTools && new URLSearchParams(window.location.search).has('test'))
   const { phase } = snap.session
   const alert = snap.session.monitoring.alert
   const immersive = IMMERSIVE.has(phase)
@@ -248,11 +217,11 @@ export function TripView() {
               <button type="button" onClick={installUpdate}>{t('idle.updateNow')}</button>
             </div>
           )}
-          <div className="disclaimer">
+          <article className="card disclaimer">
             <p><strong>{t('idle.disclaimerTitle')}</strong> {t('idle.disclaimerBody')}</p>
             <p>{t('idle.limits')}</p>
-            <p className="muted">{t('idle.privacy')}</p>
-            <label className="toggle">
+            <p className="muted small">{t('idle.privacy')}</p>
+            <label className="accept">
               <input
                 type="checkbox"
                 checked={accepted}
@@ -263,8 +232,8 @@ export function TripView() {
               />
               {t('idle.accept')}
             </label>
-          </div>
-          <details className="mount">
+          </article>
+          <details className="mount card">
             <summary>{t('idle.mountTitle')}</summary>
             <ol>
               <li>{t('idle.mount1')}</li>
@@ -273,22 +242,26 @@ export function TripView() {
               <li>{t('idle.mount4')}</li>
             </ol>
           </details>
-          <label className="toggle">
-            <input type="checkbox" checked={useLocation} onChange={(e) => setUseLocation(e.target.checked)} />
-            {t('idle.location')}
-          </label>
-          <label className="toggle">
-            <input type="checkbox" checked={useMotion} onChange={(e) => setUseMotion(e.target.checked)} />
-            {t('idle.motion')}
-          </label>
-          <label className="toggle">
-            <input type="checkbox" checked={notify} onChange={(e) => setNotify(e.target.checked)} />
-            {t('idle.notify')}
-          </label>
-          <label className="toggle">
-            <input type="checkbox" checked={testMode} onChange={(e) => setTestMode(e.target.checked)} />
-            {lang === 'vi' ? 'Bảng kiểm tra hành vi (khi test tại bàn, tự tắt vị trí)' : 'Behavior check panel (desk testing, location off)'}
-          </label>
+          <article className="card options">
+            <label className="toggle">
+              <input type="checkbox" role="switch" checked={useLocation} onChange={(e) => setUseLocation(e.target.checked)} />
+              {t('idle.location')}
+            </label>
+            <label className="toggle">
+              <input type="checkbox" role="switch" checked={useMotion} onChange={(e) => setUseMotion(e.target.checked)} />
+              {t('idle.motion')}
+            </label>
+            <label className="toggle">
+              <input type="checkbox" role="switch" checked={notify} onChange={(e) => setNotify(e.target.checked)} />
+              {t('idle.notify')}
+            </label>
+            {devTools && (
+              <label className="toggle">
+                <input type="checkbox" role="switch" checked={testMode} onChange={(e) => setTestMode(e.target.checked)} />
+                {lang === 'vi' ? 'Bảng kiểm tra hành vi (khi test tại bàn, tự tắt vị trí)' : 'Behavior check panel (desk testing, location off)'}
+              </label>
+            )}
+          </article>
           <button type="button" className="primary" onClick={start} disabled={!accepted}>
             {t('idle.start')}
           </button>
@@ -337,11 +310,11 @@ export function TripView() {
             )}
             {snap.recalibrating && <p className="cockpit-note">{t('cockpit.recalibrating')}</p>}
           </div>
-          {testMode && <TestPanel snap={snap} lang={lang} />}
+          {devTools && testMode && <TestPanel snap={snap} lang={lang} />}
           <div className="cockpit-footer">
             {snap.calibration.approximate && <p className="cockpit-note small">{t('cockpit.approx')}</p>}
             {snap.mountWarning && <p className="cockpit-note small">{t('cockpit.mountSide')}</p>}
-            <HoldButton onHold={() => controller.endTrip()}>{t('cockpit.end')}</HoldButton>
+            <button type="button" className="secondary outline end-trip" onClick={() => controller.endTrip()}>{t('cockpit.end')}</button>
           </div>
         </div>
       )}
@@ -353,7 +326,7 @@ export function TripView() {
           <p className="big">{t('fault.title')}</p>
           <p>{snap.faultHint !== null ? t(`hint.${snap.faultHint}`) : t(`fault.${snap.session.fault ?? 'SETUP_FAILED'}`)}</p>
           {snap.faultGaveUp && <p className="hint">{t('fault.gaveUp')}</p>}
-          {snap.faultDetail !== null && <p className="muted small">{snap.faultDetail}</p>}
+          {devTools && snap.faultDetail !== null && <p className="muted small">{snap.faultDetail}</p>}
           <div className="row">
             {!snap.faultGaveUp && (
               <button type="button" className="primary" onClick={() => controller.retry()}>{t('fault.retry')}</button>
@@ -372,7 +345,7 @@ export function TripView() {
         </>
       )}
 
-      {snap.backend !== null && !immersive && phase !== 'IDLE' && (
+      {devTools && snap.backend !== null && !immersive && phase !== 'IDLE' && (
         <p className="muted small">
           {snap.backend}
           {snap.frameWidth !== 480 ? ` · ${snap.frameWidth}px` : ''}
