@@ -211,6 +211,21 @@ scenarios. A short "sign check" clip also confirms the head and eye direction si
 phone. `clips/` is git-ignored: it shows a real face. Guide:
 [docs/P7_RECORDING_GUIDE.md](docs/P7_RECORDING_GUIDE.md).
 
+### Drive check (P8)
+
+GPS speed and the turn sensor (gyroscope) can only be checked in a moving car. During every
+trip the app keeps a small drive log in memory (twice a second: speed, direction of travel,
+turn rate, head angles, alarms — **no position, no images**). The trip summary shows the
+result: GPS OK or not, any alarm at a standstill, and whether the turn sensor matches the GPS
+heading in each corner. **Set up before driving, read it after parking; never touch the phone
+while driving.** A saved log can be read on a computer:
+
+```bash
+npm run drive-check -- ~/Downloads/biomonitor-drive-2026-11-03.json   # → replay-out/DRIVE_REPORT.md
+```
+
+Guide: [docs/P8_DRIVE_GUIDE.md](docs/P8_DRIVE_GUIDE.md).
+
 ### Project layout
 
 ```
@@ -284,8 +299,9 @@ It stops when you close the terminal.
 | **M2** ✅ | Calibration, detectors, alerts (sound, voice, vibration), Wake Lock, watchdog, trip controller |
 | **M3** ✅ | Dark Cockpit UI, onboarding, Vietnamese, offline PWA, CSP, battery + pause notification — **v0.1.0** |
 | **P1–P6** ✅ | Alert accuracy: 102-case scenario library + ratchet; speed context, motion sensors, gaze zones, hysteresis; attention buffer, face-lost context; robust eye closure, drowsy eyes, clean fatigue signals; smarter alarm behavior; boundary pairs, tuning report, "false alarm" marking |
-| **P7** 🎬 | Real-clip kit ready (`npm run clips`, sign check, recording guide) — waiting for recordings |
-| Next | Fixes from the clip report · GPS / gyroscope checks on a real drive |
+| **P7** ✅ | Real clips: head and eye direction signs confirmed on a real face (two were wrong, now fixed); real eye closure alarms in 1.0 s with glasses |
+| **P8** 🚗 | Drive check ready (drive log, GPS and turn-sensor check on the trip summary, `npm run drive-check`) — waiting for a real drive |
+| Next | Fixes from the drive check · in-car clips for eyes-down looks (B01) |
 
 ## License
 

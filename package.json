@@ -28,7 +28,8 @@
     "offline-check": "node scripts/offline-check.mjs",
     "scenarios": "node scripts/scenarios.ts",
     "tune": "node scripts/tune.ts",
-    "clips": "node scripts/clips.ts"
+    "clips": "node scripts/clips.ts",
+    "drive-check": "node scripts/drive-check.ts"
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "1.1.1",

@@ -269,6 +269,12 @@ export interface MotionConfig {
   turnMaxGazeDeg: number;
   /** …and for at most this long in one go (guard B15: staring out of the window in a long curve). */
   turnMaxMs: number;
+  /**
+   * `turnRate × turnRightSign > 0` means "the car turns right". +1 follows the W3C
+   * DeviceMotion axes (platform/motion.ts); confirm with the drive check (P8), which
+   * compares it with the GPS heading.
+   */
+  turnRightSign: 1 | -1;
 }
 
 export interface DegradedConfig {
@@ -568,6 +574,7 @@ export const DEFAULT_CONFIG: Readonly<Config> = Object.freeze<Config>({
     turnRateDegS: 8,
     turnMaxGazeDeg: 70,
     turnMaxMs: 4 * SECOND,
+    turnRightSign: 1,
   },
   pose: {
     headDownSign: 1,

@@ -8,7 +8,8 @@
 import { computeBaseline, fallbackBaseline, type Baseline, type CalibrationFailure } from '../../core/calibration/baseline.ts'
 import { mountTooFarToSide } from '../../core/calibration/mount.ts'
 import { DEFAULT_CONFIG, type Config } from '../../core/config.ts'
-import { createSignalPipeline, type SignalDebug, type SignalPipeline } from '../../core/detectors/pipeline.ts'
+import { createSignalPipeline, type MotionState, type SignalDebug, type SignalPipeline } from '../../core/detectors/pipeline.ts'
+import { createDriveLog, type DriveLog, type DriveLogFile } from '../../core/drive/log.ts'
 import { alertRank, createSession, hudStatus, reduce, type HudStatus } from '../../core/fsm/index.ts'
 import type { AlarmLevel, Effect, FaultReason, SessionEvent, SessionState } from '../../core/fsm/types.ts'
 import { createQualityTracker } from '../../core/signals/quality.ts'
@@ -134,6 +135,8 @@ export interface TripController {
   recalibrate(): void;
   /** Voice language for alerts. */
   setLanguage(lang: VoiceLang): void;
+  /** The drive log of the current or last trip (P8), or null before monitoring started. */
+  driveLog(): DriveLogFile | null;
   /** Stop all devices and return to IDLE. The controller can be started again. */
   dispose(): void;
 }
@@ -190,6 +193,8 @@ export function createTripController(deps: TripDeps, baseCfg: Config = DEFAULT_C
   let loop: FrameLoop | null = null
   let speed: SpeedMonitor | null = null
   let motion: MotionMonitor | null = null
+  /** Twice-a-second numbers for the drive check (P8); kept after the trip for the summary. */
+  let driveLog: DriveLog | null = null
   let stopVisibility: (() => void) | null = null
   let stopBattery: (() => void) | null = null
   let batteryWarned = false
@@ -684,17 +689,40 @@ export function createTripController(deps: TripDeps, baseCfg: Config = DEFAULT_C
     })
   }
 
+  /** The gyroscope state with the configured turn sign applied (> 0 = the car turns right). */
+  function motionState(): MotionState | null {
+    const m = motion?.state()
+    if (m === undefined) return null
+    return m.turnRate === null ? m : { ...m, turnRate: m.turnRate * cfg.motion.turnRightSign }
+  }
+
   function onMonitoringFrame(frame: ProcessedFrame) {
     const p = pipeline
     if (p === null) return
+    const m = motionState()
+    const speedKmh = speed?.speedKmh() ?? null
     const out = p.update(frame, {
       armed: speed?.armed() ?? true,
       alarmActive: session.monitoring.latched !== null,
       // With location on, the speed decides (null = no GPS fix = moving); without it, always armed.
-      ...(speed !== null && { speedKmh: speed.speedKmh() }),
-      ...(motion !== null && { motion: motion.state() }),
+      ...(speed !== null && { speedKmh }),
+      ...(m !== null && { motion: m }),
     })
     dispatch({ type: 'FRAME', signals: out.signals })
+
+    driveLog ??= createDriveLog(cfg.motion.turnRightSign)
+    driveLog.add(frame.raw.t, {
+      speedKmh,
+      headingDeg: speed?.headingDeg() ?? null,
+      turnRate: m?.turnRate ?? null,
+      still: m?.still ?? false,
+      yawDeg: out.debug.yawDeg,
+      downDeg: out.debug.downDeg,
+      zone: out.debug.zone,
+      armedD: out.signals.armedD ?? out.signals.armed,
+      armedL: out.signals.armedL ?? out.signals.armed,
+      alarm: session.monitoring.latched,
+    })
 
     if (recalibFrames !== null) {
       recalibFrames.push(frame)
@@ -723,6 +751,7 @@ export function createTripController(deps: TripDeps, baseCfg: Config = DEFAULT_C
 
   return {
     getSnapshot: () => snap,
+    driveLog: () => driveLog?.file() ?? null,
     subscribe(listener) {
       listeners.add(listener)
       return () => listeners.delete(listener)
@@ -733,6 +762,7 @@ export function createTripController(deps: TripDeps, baseCfg: Config = DEFAULT_C
       options = opts
       cfg = opts.config ?? baseCfg
       alarmActive = false
+      driveLog = null
       publish({ alerts: [] })
       restarts = 0
       frameWidth = cfg.performance.normalWidth

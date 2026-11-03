@@ -203,6 +203,7 @@ real phone sensors (GPS / motion).
 | **P5** | Alarm behavior: step down, recovery tolerance, rate limit, "green light" alert | T10 |
 | **P6** | Self-improve loop: config tuning against the scenario library (zero misses on must-alarm cases); trip review "false alarm" marking | T12, T13 |
 | **P7** | Real-clip validation for the R cases (you record, parked or at a desk) | T14 |
+| **P8** | Real-drive check: GPS speed and gyroscope turn sign, from a passive drive log | T1, T2 |
 
 **Done when:**
 - All 94 synthetic traces pass in CI.
@@ -437,6 +438,30 @@ To revisit only with clips recorded in the car (parked, phone in its mount).
 **P7 result, all signs confirmed on a real face:** `headDownSign` +1 (was −1),
 `yawRightSign` −1 (was +1), `gazeXRightSign` −1 and the blendshape directions unchanged.
 R01 (real closure) alarms in 1.0 s with glasses.
+
+### P8 status (real drive) — check ready, waiting for a drive
+
+The desk cannot test GPS speed (decision 1: quiet at a standstill) or the gyroscope turn sign
+(T2: looking into a turn is driving). P8 checks both from an ordinary drive, with **nothing to
+do while driving**:
+- **Drive log** (`src/core/drive/log.ts`): during monitoring, a row on a fixed 0.5 s grid —
+  speed, GPS heading (direction of travel), turn rate, still, head yaw/down, zone, arming, and
+  the highest alarm since the previous row (short alarms are not lost). No latitude/longitude,
+  no images. In memory only; about 4 h fit, then it stops and says so.
+- **Drive check** (`src/core/drive/check.ts`): GPS coverage (ok ≥ 70%, none < 5%), top speed,
+  alarms that **started** below 3 km/h (not counted if the speed rises within 2 s: that is the
+  moving-off alert). Turns = gyroscope ≥ 8 °/s for ≥ 1.5 s. Each turn is compared with the GPS
+  heading change (≥ 15°, through north handled); without heading, with the head yaw (≥ 5°,
+  drivers look into the turn) as a weaker witness. Verdict: ≥ 75% agree = OK, ≤ 25% = flip,
+  else unclear; needs 3 heading turns or 5 head turns.
+- **`motion.turnRightSign`** (new config, +1): the controller applies it to the gyroscope, so a
+  reversed sensor is a one-value fix, like the P7 pose signs.
+- **Where:** the trip summary shows the result (EN/VI) and "Save drive log";
+  `npm run drive-check -- <file>` prints a per-turn table. Guide:
+  [P8_DRIVE_GUIDE.md](P8_DRIVE_GUIDE.md).
+- Tested with synthetic drives (right/left turns, reversed sensor, turn through north, lane
+  change wobble, no heading, no sensor, weak GPS, stopped vs moving-off alarms) and end to end
+  in Chromium (12 s of monitoring → 24 rows, download works under the production CSP).
 
 ## 5. Safety rules for every change
 

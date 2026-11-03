@@ -94,7 +94,7 @@ function harness(opts: { gpu?: boolean; cameraError?: CameraError; engineFails?:
     },
     vibrate: (l) => void calls.push(`vibrate:${l}`),
     watchVisibility: (cb) => ((visibility = cb), () => {}),
-    startSpeedMonitor: () => ({ speedKmh: () => (armed ? 50 : 0), armed: () => armed, stop: () => {} }),
+    startSpeedMonitor: () => ({ speedKmh: () => (armed ? 50 : 0), headingDeg: () => (armed ? 90 : null), armed: () => armed, stop: () => {} }),
     watchdog: {
       kick: (n) => realDog.kick(n),
       check: (n) => realDog.check(n),
@@ -500,6 +500,42 @@ describe('trip controller: P2 context (speed, motion, mount)', () => {
     expect(h.calls.some((c) => c.startsWith('alarm:D'))).toBe(true)
     // A look-away alarm tells the driver what to do; the tone alone is not enough.
     expect(h.calls).toContain('speak:lookAtRoad')
+  })
+
+  it('a flipped turn sign (config) flips the gyroscope: the same right turn no longer excuses a right look (P8)', async () => {
+    const flipped = { ...DEFAULT_CONFIG, motion: { ...DEFAULT_CONFIG.motion, turnRightSign: (-DEFAULT_CONFIG.motion.turnRightSign) as 1 | -1 } }
+    const h = harness()
+    await toMonitoring(h, {}, flipped)
+    h.setTurn(25)
+    await h.run(2500, { yaw: right(45) })
+    expect(h.calls.some((c) => c.startsWith('alarm:D'))).toBe(true)
+  })
+
+  it('records a drive log twice a second during monitoring, kept after the trip (P8)', async () => {
+    const h = harness()
+    expect(h.ctl.driveLog()).toBeNull()
+    await h.start(true)
+    await h.run(SETUP_MS)
+    for (let i = 0; i < 4; i++) {
+      await h.run(1800)
+      await h.run(200, { ear: 0.05, blink: 0.95 })
+    }
+    await h.run(500)
+    h.setTurn(20)
+    await h.run(3000, { yaw: right(30) })
+    h.ctl.endTrip()
+    const log = h.ctl.driveLog()
+    expect(log?.turnRightSign).toBe(DEFAULT_CONFIG.motion.turnRightSign)
+    const last = log?.rows.at(-1)
+    expect(last).toMatchObject({ speedKmh: 50, headingDeg: 90, turnRate: 20 * DEFAULT_CONFIG.motion.turnRightSign, armedD: true })
+    expect(last?.yawDeg).toBeGreaterThan(20)
+    // Twice a second: about 7 rows for 3.5 s of monitoring.
+    expect(log?.rows.length).toBeGreaterThanOrEqual(6)
+    expect(log?.rows.length).toBeLessThanOrEqual(8)
+    // A new trip starts a new log.
+    h.ctl.reset()
+    await h.start(true)
+    expect(h.ctl.driveLog()).toBeNull()
   })
 
   it('stops the motion monitor at the end of the trip', async () => {

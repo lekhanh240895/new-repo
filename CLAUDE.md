@@ -27,6 +27,7 @@ npm run scenarios -- --update-baseline   # record new passes in src/scenarios/ba
 npm run tune                             # threshold sensitivity, docs/TUNING_REPORT.md (~6 min)
 npm run replay -- --clip clips/x.y4m --seconds 10 [--mode trip --expect-alerts L1,L2,L3]
 npm run build && npm run clips           # real-clip judging → clips/CLIP_REPORT.md
+npm run drive-check -- <drive-log.json>  # P8: GPS + gyroscope check of a saved drive log
 ```
 
 Debug UI: the **Debug** tab or `/?debug`; `?delegate=cpu` forces the CPU model, `?worker=0` forces the main-thread fallback.
@@ -43,6 +44,7 @@ Layers (dependencies point inward; keep it that way):
 - `src/app/debug/` — Debug mode; `src/app/i18n.ts` — English/Vietnamese strings (both must stay in sync).
 - `src/scenarios/` + `scripts/scenarios.ts` — scripted situations run through the real detectors and FSM. `npm test` includes a **ratchet**: any scenario listed as passing in `src/scenarios/baseline.ts` must keep passing. Group G holds boundary pairs (just under / over each threshold), so moving a threshold ~15% breaks tests by design.
 - `src/clips/` + `scripts/clips.ts` — judges real recorded clips (P7) with the same code as the scenarios; includes a "sign check" for head/eye direction signs.
+- `src/core/drive/` — P8 drive log (recorded by the trip controller twice a second while monitoring; no position) and the drive check (GPS coverage, alarms at a standstill, gyroscope sign vs GPS heading). Shown on the trip summary (`DriveCheckView.tsx`) and by `scripts/drive-check.ts`.
 
 Safety design rules from the spec (don't violate when changing alert logic): fail loud when the face/camera isn't usable; alarms never need a touch to stop; losing the face during an alarm does not cancel it; no AGPL-licensed models. Alert behavior depends on context (speed class, parked detection, turning, face-lost after head turn/drop) — the tables in README.md "Alert behavior" document the current rules and should be updated when defaults in `config.ts` change.
 
@@ -54,4 +56,5 @@ Safety design rules from the spec (don't violate when changing alert logic): fai
 - Testing alerts at a desk: untick "Use location…" on the start screen, otherwise a still phone with no speed reading counts as parked and suppresses distraction alarms (D1/D2).
 - A new service worker is never applied mid-trip; the start screen offers "Update now".
 - Unit tests sit next to their source as `*.test.ts`. CI also runs `npm audit --omit=dev --audit-level=high`.
-- Known limits (from `CHANGELOG.md`): the head-pitch sign (`pose.headDownSign`) still needs a check on a real phone; sunglasses are not detected automatically.
+- Direction signs: `pose.headDownSign` (+1), `pose.yawRightSign` (−1) and `pose.gazeXRightSign` (−1) were measured on real clips (P7). `motion.turnRightSign` (gyroscope) is still a guess until a real drive confirms it (P8 drive check). Tests build directions through these signs (`down()`/`right()` helpers, `frameFor`), never from raw angles.
+- Known limits: sunglasses are not detected automatically; an eyes-down look where the lids cover the eyes (phone in the lap, long speedometer glance) reads like closed eyes and raises the L alarm — kept on purpose (see "Decision (P7)" in `docs/ALERT_ACCURACY_PLAN.md`).

@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+### Alert accuracy (P1–P8)
+- Scenario library (122 cases) with a ratchet; context-aware alarms (speed, turns, gaze zones,
+  attention buffer, face-lost context, robust eye closure, step-down) — see
+  `docs/ALERT_ACCURACY_PLAN.md`.
+- **Real clips (P7):** head-down and head-turn signs were wrong and are fixed
+  (`pose.headDownSign` +1, `pose.yawRightSign` −1); a real eye closure alarms in 1.0 s with glasses.
+- **Drive check (P8):** the trip summary checks GPS speed and the turn sensor after a real
+  drive; "Save drive log" (numbers only, no position); `npm run drive-check`.
+- New UI (cards, status orb, alarm panel), tap to end a trip, dev tools hidden in production.
+
+### Known limits
+- The gyroscope turn sign (`motion.turnRightSign`) still needs a real drive.
+- An eyes-down look where the lids cover the eyes reads like closed eyes (L alarm, on purpose).
+- Sunglasses are not detected automatically.
+
 ## v0.1.0 — first public preview
 
 > Not a certified safety device. Tested with replayed video, not yet in real driving.

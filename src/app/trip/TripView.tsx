@@ -10,6 +10,7 @@ import { AlertIcon, CameraIcon, CheckIcon, EyeIcon, EyeOffIcon, LogoIcon, MoonIc
 import { useLang, type TextKey } from '../i18n.ts'
 import { installUpdate, usePwaState } from '../pwa.ts'
 import type { AlertRecord, TripSnapshot } from './controller.ts'
+import { DriveCheckView } from './DriveCheckView.tsx'
 import { TestPanel } from './TestPanel.tsx'
 import { useTrip } from './useTrip.ts'
 
@@ -354,6 +355,7 @@ export function TripView() {
           <h2>{t('summary.title')}</h2>
           <Summary snap={snap} t={t} />
           <AlertReview alerts={snap.alerts} t={t} />
+          <DriveCheckView log={controller.driveLog()} t={t} />
           <button type="button" className="primary" onClick={() => controller.reset()}>{t('summary.new')}</button>
         </>
       )}
