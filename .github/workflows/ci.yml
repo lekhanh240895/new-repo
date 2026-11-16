@@ -30,3 +30,16 @@ jobs:
       - run: npm run smoke
       # Installs the PWA, goes offline, reloads and starts the pipeline from the caches.
       - run: npm run offline-check
+
+  # Every push to main (a merged PR or a direct push) publishes the app, but only when the
+  # checks above are green. Pull requests never deploy.
+  deploy:
+    needs: check
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    uses: ./.github/workflows/deploy-pages.yml
+    with:
+      skip_if_not_main_tip: true

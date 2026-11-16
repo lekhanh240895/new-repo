@@ -266,9 +266,12 @@ The app is a folder of static files (`dist/`) and must be served over **HTTPS** 
 
 - **Cloudflare Pages (recommended):** build command `npm run build`, output folder `dist`.
   It reads the generated `dist/_headers`, so the strict CSP covers the page **and** the vision worker.
-- **GitHub Pages:** run the *Deploy to GitHub Pages* workflow by hand (Actions tab) after
-  enabling Pages (Settings → Pages → Source: GitHub Actions). GitHub Pages cannot send headers,
-  so only the page gets the CSP (via a `<meta>` tag), not the worker.
+- **GitHub Pages:** enable Pages once (Settings → Pages → Source: GitHub Actions). After that,
+  **every push to `main` deploys by itself** — a merged pull request or a direct push — but only
+  when the CI checks (types, lint, tests, build, audit, smoke, offline check) are green. Pull
+  requests never deploy. If two commits arrive close together, an older run never replaces a
+  newer one. You can still run *Deploy to GitHub Pages* by hand (Actions tab). GitHub Pages
+  cannot send headers, so only the page gets the CSP (via a `<meta>` tag), not the worker.
 
 New versions are never applied in the middle of a trip: the start screen offers "Update now".
 
@@ -295,8 +298,10 @@ It stops when you close the terminal.
 **C. GitHub Pages** (the page gets the CSP from a meta tag, the worker does not)
 
 1. Repo → Settings → Pages → Source: **GitHub Actions**.
-2. Actions → *Deploy to GitHub Pages* → Run workflow.
-3. The address is `https://<user>.github.io/<repo>/`.
+2. Push to `main` (or merge a PR): CI runs, and when it is green the app deploys. You can also
+   run Actions → *Deploy to GitHub Pages* → Run workflow by hand.
+3. The address is `https://<user>.github.io/<repo>/`. Watch the run in the Actions tab; a red
+   CI means nothing was deployed.
 
 **On the phone**
 

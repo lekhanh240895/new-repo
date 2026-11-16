@@ -15,6 +15,8 @@
   use (Wi-Fi: automatic; mobile data: button with the size), "Ready to drive" checklist,
   Vietnamese-first install dialog with screenshots, persistent storage, old model caches removed.
   CI now also starts a trip offline after the download.
+- **Auto deploy:** every push to `main` (merged PR or direct push) deploys to GitHub Pages after
+  CI is green; older runs never replace newer ones.
 
 ### Known limits
 - The gyroscope turn sign (`motion.turnRightSign`) still needs a real drive.

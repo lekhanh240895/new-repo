@@ -1,6 +1,7 @@
 name: Deploy to GitHub Pages
 
-# Manual only: publishing the app is a deliberate step (Actions → this workflow → Run workflow).
+# Runs automatically after CI passes on every push to main (merged PRs and direct pushes):
+# see the `deploy` job in ci.yml. It can also be run by hand (Actions → this workflow → Run workflow).
 # First enable Pages in the repo: Settings → Pages → Source: GitHub Actions.
 #
 # Note: GitHub Pages cannot send HTTP headers, so only the page gets the CSP (from a
@@ -8,12 +9,19 @@ name: Deploy to GitHub Pages
 # covers both — see README "Deploy".
 on:
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      skip_if_not_main_tip:
+        description: 'Skip when a newer commit is already on main (its own run will deploy it)'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
   pages: write
   id-token: write
 
+# One deploy at a time; a running deploy is never cancelled halfway.
 concurrency:
   group: pages
   cancel-in-progress: false
@@ -21,23 +29,46 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      skip: ${{ steps.fresh.outputs.skip }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+        with:
+          fetch-depth: 0
+      # Two pushes close together can finish CI out of order. Never let an older commit
+      # replace a newer one: if main has moved on, this run stops and the newer run deploys.
+      - id: fresh
+        run: |
+          skip=false
+          if [ "${{ inputs.skip_if_not_main_tip }}" = "true" ]; then
+            git fetch --quiet origin main
+            if [ "$(git rev-parse origin/main)" != "$GITHUB_SHA" ]; then
+              skip=true
+              echo "main has a newer commit than $GITHUB_SHA: skipping this deploy."
+            fi
+          fi
+          echo "skip=$skip" >> "$GITHUB_OUTPUT"
+      - if: steps.fresh.outputs.skip != 'true'
+        uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
           cache: npm
-      - run: npm ci
-      - run: npm test
-      - run: npm run build
+      - if: steps.fresh.outputs.skip != 'true'
+        run: npm ci
+      - if: steps.fresh.outputs.skip != 'true'
+        run: npm test
+      - if: steps.fresh.outputs.skip != 'true'
+        run: npm run build
         env:
           BASE_PATH: /${{ github.event.repository.name }}/
-      - uses: actions/upload-pages-artifact@v3
+      - if: steps.fresh.outputs.skip != 'true'
+        uses: actions/upload-pages-artifact@v3
         with:
           path: dist
 
   deploy:
     needs: build
+    if: needs.build.outputs.skip != 'true'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
