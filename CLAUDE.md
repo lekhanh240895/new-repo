@@ -28,6 +28,7 @@ npm run tune                             # threshold sensitivity, docs/TUNING_RE
 npm run replay -- --clip clips/x.y4m --seconds 10 [--mode trip --expect-alerts L1,L2,L3]
 npm run build && npm run clips           # real-clip judging → clips/CLIP_REPORT.md
 npm run drive-check -- <drive-log.json>  # P8: GPS + gyroscope check of a saved drive log
+npm run screenshots                      # regenerate public/screenshots/ (install dialog) from a build
 ```
 
 Debug UI: the **Debug** tab or `/?debug`; `?delegate=cpu` forces the CPU model, `?worker=0` forces the main-thread fallback.
@@ -55,6 +56,7 @@ Safety design rules from the spec (don't violate when changing alert logic): fai
 - `clips/` and `replay-out/` are git-ignored; never commit videos of real people. Record clips parked/at a desk, never while driving.
 - Testing alerts at a desk: untick "Use location…" on the start screen, otherwise a still phone with no speed reading counts as parked and suppresses distraction alarms (D1/D2).
 - A new service worker is never applied mid-trip; the start screen offers "Update now".
+- Offline model (`src/platform/offline.ts`, `src/app/offlineModel.ts`): the face model + worker wasm are downloaded into the service worker's own model cache (`__MODEL_CACHE__`, set in `vite.config.ts`). Stored copies must not carry `Vary` (the worker's module import is a CORS request; a `Vary: Origin` copy is missed and an offline trip fails). `npm run offline-check` covers this: it starts a trip offline after the download — keep it green.
 - Unit tests sit next to their source as `*.test.ts`. CI also runs `npm audit --omit=dev --audit-level=high`.
 - Direction signs: `pose.headDownSign` (+1), `pose.yawRightSign` (−1) and `pose.gazeXRightSign` (−1) were measured on real clips (P7). `motion.turnRightSign` (gyroscope) is still a guess until a real drive confirms it (P8 drive check). Tests build directions through these signs (`down()`/`right()` helpers, `frameFor`), never from raw angles.
 - Known limits: sunglasses are not detected automatically; an eyes-down look where the lids cover the eyes (phone in the lap, long speedometer glance) reads like closed eyes and raises the L alarm — kept on purpose (see "Decision (P7)" in `docs/ALERT_ACCURACY_PLAN.md`).

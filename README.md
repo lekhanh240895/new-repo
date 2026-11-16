@@ -196,6 +196,23 @@ After a trip, the summary lets the driver mark an alert as a false alarm. Each m
 that alert type by 5%, at most +10%, stored only on the phone. Phone looks and long eye
 closures (L2, L3) never change.
 
+### Install and offline (PWA)
+
+The app is a PWA: open the site once, then **install** it. Android and desktop Chrome show an
+**Install** button on the start screen (one tap opens the system dialog). On **iPhone/iPad**
+(Safari) the card shows the steps: Share → **Add to Home Screen**. The installed app opens full
+screen and keeps working without signal.
+
+The face model (~18 MB) is downloaded ahead of the first trip so a trip can start offline:
+**by itself on Wi-Fi**, and with a **"Download now"** button on mobile data (iPhone cannot tell
+the connection type, so it always asks). The **Ready to drive** list on the start screen shows
+what is ready: installed, works without signal, camera and location allowed, each with a
+one-line fix. Nothing in it blocks starting a trip. Updates are never applied mid-trip.
+
+The install dialog text is Vietnamese first (`manifest.lang: vi`); screenshots for it live in
+`public/screenshots/` (`npm run build && npm run screenshots && npm run build` regenerates
+them: app screens only, no camera, no faces).
+
 ### Real clips (P7)
 
 The synthetic scenarios guess some numbers (how low the lids drop on a speedometer glance,

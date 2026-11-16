@@ -11,6 +11,10 @@
 - **Drive check (P8):** the trip summary checks GPS speed and the turn sensor after a real
   drive; "Save drive log" (numbers only, no position); `npm run drive-check`.
 - New UI (cards, status orb, alarm panel), tap to end a trip, dev tools hidden in production.
+- **PWA:** install card (Android one tap, iPhone steps), the face model downloads for offline
+  use (Wi-Fi: automatic; mobile data: button with the size), "Ready to drive" checklist,
+  Vietnamese-first install dialog with screenshots, persistent storage, old model caches removed.
+  CI now also starts a trip offline after the download.
 
 ### Known limits
 - The gyroscope turn sign (`motion.turnRightSign`) still needs a real drive.

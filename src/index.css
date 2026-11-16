@@ -1103,6 +1103,44 @@ button.primary:disabled {
   --pico-border-color: #3a4048;
 }
 
+/* ---- install card and "Ready to drive" (PWA) ---- */
+.install-card ol {
+  margin: 0.5rem 0;
+  padding-left: 1.2rem;
+}
+
+.install-actions {
+  display: flex;
+  gap: 0.6rem;
+  margin-top: 0.75rem;
+}
+
+.install-actions button {
+  width: auto;
+  min-height: 2.75rem;
+  margin: 0;
+  padding: 0 1.1rem;
+}
+
+.ready .checklist {
+  padding: 0;
+  border: 0;
+  background: none;
+  font-size: 0.9rem;
+}
+
+.ready .checklist li {
+  align-items: flex-start;
+  padding: 0.55rem 0;
+}
+
+.ready button.link {
+  width: auto;
+  min-height: 0;
+  margin: 0;
+  font-size: inherit;
+}
+
 /* ---- drive check (P8) ---- */
 .drive-check h3 {
   margin: 1rem 0 0.25rem;

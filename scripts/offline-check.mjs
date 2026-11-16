@@ -4,6 +4,10 @@
  * caches the app shell; the model and wasm are cached when first used), go
  * offline, reload, and start the vision pipeline again.
  *
+ * Second part (PWA): a driver who installs the app and never starts a trip online uses the
+ * "Download for offline" button (or the automatic Wi-Fi download); the first trip may then
+ * be started with no signal at all. The model must come from the downloaded copy.
+ *
  *   npm run build && node scripts/offline-check.mjs
  */
 import { dirname, join } from 'node:path'
@@ -29,6 +33,7 @@ const browser = await chromium.launch({
 })
 
 let ok = false
+let downloadOk = false
 try {
   const context = await browser.newContext()
   const page = await context.newPage()
@@ -66,10 +71,44 @@ try {
   ok = offline.backend !== null && offline.frames > 0 && offline.errors.length === 0 && errors.length === 0
   if (!ok) console.error('offline check failed', { errors })
   else console.log('offline check passed')
+
+  // 3. A fresh browser that never ran a trip: download for offline, go offline, start a trip.
+  const fresh = await browser.newContext()
+  const tripPage = await fresh.newPage()
+  const tripErrors = []
+  tripPage.on('pageerror', (e) => tripErrors.push(e.message))
+  await tripPage.goto(`${url}?replay&tab=trip`)
+  await tripPage.getByRole('button', { name: 'Download now' }).click({ timeout: 40_000 })
+  await within(120_000, 'offline download', tripPage.getByText('Works without signal').waitFor())
+  await fresh.setOffline(true)
+  await tripPage.reload()
+  await within(30_000, 'offline reload', tripPage.getByText('Works without signal').waitFor())
+  await tripPage.getByLabel('I understand').check()
+  await tripPage.getByRole('button', { name: 'Start trip' }).click()
+  // The CI clip has no face, so the trip cannot reach MONITORING: what matters is that the model
+  // loaded from the downloaded copy (a backend is set) and did not fail ("model failed to load").
+  await within(
+    120_000,
+    'offline model load',
+    tripPage
+      .waitForFunction(() => {
+        const s = window.__biomonitorTrip?.snapshot()
+        return s !== undefined && (s.backend !== null || s.log.some((l) => /failed/.test(l)))
+      })
+      .then((h) => h.jsonValue()),
+  )
+  const trip = await tripPage.evaluate(() => {
+    const s = window.__biomonitorTrip.snapshot()
+    return { backend: s.backend, modelFailed: s.log.some((l) => /model failed|engine failed/.test(l)) }
+  })
+  console.log('offline trip after download:', trip)
+  downloadOk = trip.backend !== null && !trip.modelFailed && tripErrors.length === 0
+  if (!downloadOk) console.error('offline trip after download failed', { tripErrors, trip })
+  else console.log('offline trip after download passed')
 } catch (err) {
   console.error('offline check failed:', err instanceof Error ? err.message : err)
 } finally {
   await browser.close()
   await new Promise((r) => server.httpServer.close(r))
 }
-process.exit(ok ? 0 : 1)
+process.exit(ok && downloadOk ? 0 : 1)

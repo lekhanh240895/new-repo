@@ -2,7 +2,7 @@
 import basicSsl from '@vitejs/plugin-basic-ssl'
 import react from '@vitejs/plugin-react'
 import { createHash } from 'node:crypto'
-import { readFileSync } from 'node:fs'
+import { readFileSync, statSync } from 'node:fs'
 import { defineConfig, type Plugin } from 'vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
@@ -57,11 +57,28 @@ function contentSecurityPolicy(): Plugin {
 
 /** The model cache name changes whenever a self-hosted asset changes, so phones never keep a stale model. */
 const assetsVersion = createHash('sha256').update(readFileSync('assets.lock.json')).digest('hex').slice(0, 8)
+const MODEL_CACHE = `biomonitor-model-${assetsVersion}`
+
+/** Download size for offline use, shown before asking on mobile data: the worker's wasm + the model. */
+function modelDownloadMb(): number {
+  const files = ['public/mediapipe/wasm/vision_wasm_module_internal.js', 'public/mediapipe/wasm/vision_wasm_module_internal.wasm', 'public/models/face_landmarker.task']
+  try {
+    return Math.round(files.reduce((sum, f) => sum + statSync(f).size, 0) / 1e6)
+  } catch {
+    // Assets not fetched yet (fresh clone before `npm run assets`): a close estimate.
+    return 18
+  }
+}
 
 // Vite requires a default export for its config file.
 export default defineConfig(({ mode }) => ({
   // GitHub Pages serves the app from /<repo>/; the deploy workflow sets BASE_PATH.
   base: process.env.BASE_PATH ?? '/',
+  // The app reads these to download the model ahead of the first trip (offline use).
+  define: {
+    __MODEL_CACHE__: JSON.stringify(MODEL_CACHE),
+    __MODEL_DOWNLOAD_MB__: JSON.stringify(modelDownloadMb()),
+  },
   plugins: [
     react(),
     contentSecurityPolicy(),
@@ -73,7 +90,11 @@ export default defineConfig(({ mode }) => ({
       manifest: {
         name: 'BioMonitor DMS',
         short_name: 'BioMonitor',
-        description: 'On-device driver drowsiness and distraction alerts. No video leaves your phone.',
+        // Vietnamese first (decision 2026-11): this text shows in the system install dialog.
+        description: 'Cảnh báo ngủ gật và mất tập trung khi lái xe, chạy ngay trên điện thoại. Không có video nào rời khỏi máy.',
+        lang: 'vi',
+        dir: 'ltr',
+        categories: ['utilities', 'navigation'],
         theme_color: '#000000',
         background_color: '#000000',
         display: 'standalone',
@@ -85,11 +106,18 @@ export default defineConfig(({ mode }) => ({
           { src: 'icons/icon-512.png', sizes: '512x512', type: 'image/png' },
           { src: 'icons/maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
         ],
+        // With screenshots, Android shows the richer install dialog. App screens only: no faces.
+        screenshots: [
+          { src: 'screenshots/start.png', sizes: '1080x2340', type: 'image/png', form_factor: 'narrow', label: 'Màn hình bắt đầu' },
+          { src: 'screenshots/ready.png', sizes: '1080x2340', type: 'image/png', form_factor: 'narrow', label: 'Sẵn sàng lái xe' },
+          { src: 'screenshots/wide.png', sizes: '1280x720', type: 'image/png', form_factor: 'wide', label: 'Màn hình bắt đầu' },
+        ],
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,webmanifest}'],
         // The model and wasm (~30 MB) are cached on first use instead of at install.
-        globIgnores: ['mediapipe/**', 'models/**'],
+        // Store screenshots are only for the install dialog: not needed offline.
+        globIgnores: ['mediapipe/**', 'models/**', 'screenshots/**'],
         navigateFallback: 'index.html',
         cleanupOutdatedCaches: true,
         runtimeCaching: [
@@ -97,7 +125,7 @@ export default defineConfig(({ mode }) => ({
             urlPattern: ({ url }) => url.pathname.includes('/mediapipe/wasm/') || url.pathname.includes('/models/'),
             handler: 'CacheFirst',
             options: {
-              cacheName: `biomonitor-model-${assetsVersion}`,
+              cacheName: MODEL_CACHE,
               expiration: { maxEntries: 20 },
               cacheableResponse: { statuses: [200] },
             },

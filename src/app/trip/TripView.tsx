@@ -11,6 +11,7 @@ import { useLang, type TextKey } from '../i18n.ts'
 import { installUpdate, usePwaState } from '../pwa.ts'
 import type { AlertRecord, TripSnapshot } from './controller.ts'
 import { DriveCheckView } from './DriveCheckView.tsx'
+import { InstallCard, ReadyChecklist } from './ReadyPanel.tsx'
 import { TestPanel } from './TestPanel.tsx'
 import { useTrip } from './useTrip.ts'
 
@@ -225,6 +226,7 @@ export function TripView() {
             <h2>{t('idle.heroTitle')}</h2>
             <p>{t('idle.tagline')}</p>
           </div>
+          <InstallCard t={t} />
           <article className="card disclaimer">
             <p><strong>{t('idle.disclaimerTitle')}</strong> {t('idle.disclaimerBody')}</p>
             <p>{t('idle.limits')}</p>
@@ -270,10 +272,10 @@ export function TripView() {
               </label>
             )}
           </article>
+          <ReadyChecklist t={t} useLocation={useLocation} />
           <button type="button" className="primary" onClick={start} disabled={!accepted}>
             {t('idle.start')}
           </button>
-          {pwa.offlineReady && <p className="muted small">{t('idle.offline')}</p>}
         </>
       )}
 

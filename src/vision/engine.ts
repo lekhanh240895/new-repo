@@ -35,6 +35,19 @@ export function assetUrls(): Pick<AnalyzerOptions, 'wasmBase' | 'modelUrl'> {
   }
 }
 
+/**
+ * The files the worker loads on this device (the wasm variant depends on SIMD support),
+ * so they can be downloaded ahead of the first trip for offline use. Asks MediaPipe for
+ * the paths; nothing is downloaded here.
+ */
+export async function modelFiles(): Promise<string[]> {
+  const { wasmBase, modelUrl } = assetUrls()
+  const { FilesetResolver } = await import('@mediapipe/tasks-vision')
+  // The worker uses the module loader (see startWorker).
+  const fileset = await FilesetResolver.forVisionTasks(wasmBase, true)
+  return [fileset.wasmLoaderPath, fileset.wasmBinaryPath, modelUrl]
+}
+
 function withTimeout<T>(p: Promise<T>, ms: number, what: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error(`${what} timed out after ${ms} ms`)), ms)
